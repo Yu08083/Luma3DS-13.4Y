@@ -206,9 +206,9 @@ def check_cia(path, rsf):
     require(part(sections['meta'], 0, 0x180) == part(exhdr, 0x40, 0x180), 'CIA metadata dependencies mismatch')
     require(le32(sections['meta'], 0x300) == le32(exhdr, 0x208) == 2, 'CIA metadata core version mismatch')
     require(digest(part(sections['meta'], 0x400, 0x36C0)).hex() == ncch['files']['icon']['sha256'], 'CIA metadata icon mismatch')
-    require(be16(tmd, body + 0x9C) == 1024, 'TMD version must be 1.0.0 (1024)')
+    require(be16(tmd, body + 0x9C) == 1025, 'TMD version must be 1.0.1 (1025)')
     return {'result': 'pass', 'bytes': len(data), 'sha256': digest(data).hex(), 'content_id': content_id,
-            'tmd_version': 1024, 'ncch': ncch, 'hardware_tested': False, 'rsa_signatures_verified': False}
+            'tmd_version': 1025, 'ncch': ncch, 'hardware_tested': False, 'rsa_signatures_verified': False}
 
 
 def main():

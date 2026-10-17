@@ -73,6 +73,7 @@ else if(strstr(url,"/update.json")){CHECK(limit==2048);data=manifestJson;}
 else {CHECK(limit==1024&&strstr(url,"/v13.4Y/boot.firm"));char firm[1024];memset(firm,'F',sizeof(firm));if(mode==11)UpdaterApp_Cancel();return sink(context,firm,mode==7?1023:1024);}
 for(size_t size=strlen(data),offset=0;offset<size;){uint32_t n=(uint32_t)(size-offset);if(n>7)n=7;int result=sink(context,data+offset,n);if(result)return result;offset+=n;}return 0;
 }
+void UpdateNet_Diagnostics(UpdateNetDiagnostics *out){memset(out,0,sizeof(*out));}
 int UpdateStorage_CurrentMatches(const UpdateManifest *m,const UpdateHooks *h){CHECK(m->size==1024&&h);++currentCalls;return mode==2?1:mode==3?UPDATE_ERR_SD:0;}
 UpdateResult UpdateStorage_Begin(const UpdateManifest *m,const UpdateHooks *h){CHECK(m->size==1024&&h);++beginCalls;return mode==5?UPDATE_ERR_SD:UPDATE_OK;}
 UpdateResult UpdateStorage_Write(const void *p,uint32_t n){CHECK(p&&n<=1024);++writeCalls;bytesWritten+=n;return mode==8?UPDATE_ERR_SD:UPDATE_OK;}

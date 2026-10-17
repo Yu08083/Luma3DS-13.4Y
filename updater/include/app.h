@@ -1,5 +1,6 @@
 #pragma once
 #include "updater.h"
+#include "updater_net.h"
 
 typedef struct UpdaterAppView {
     bool busy,available,installing,cancelling;
@@ -7,6 +8,7 @@ typedef struct UpdaterAppView {
     UpdateStage stage;
     uint32_t done,total;
     char version[UPDATE_MAX_TAG];
+    UpdateNetDiagnostics network;
 } UpdaterAppView;
 
 void UpdaterApp_Init(void);

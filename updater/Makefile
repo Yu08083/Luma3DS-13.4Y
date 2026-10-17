@@ -15,11 +15,11 @@ INCLUDES := include $(CORE)/include $(CORE)/third_party/mbedtls/include
 LIBDIRS := $(CTRULIB)
 
 APP_TITLE := Luma3DS 13.4Y Updater
-APP_DESCRIPTION := Luma3DS 13.4Y Updater
+APP_DESCRIPTION := Luma3DS 13.4Y Updater v1.0.1
 APP_AUTHOR := @yu_
 
 ARCH := -march=armv6k -mtune=mpcore -mfpu=vfp -mfloat-abi=hard -mtp=soft
-CFLAGS := -g -std=gnu11 -Os -Wall -Wextra -Werror -mword-relocations -ffunction-sections -fdata-sections $(ARCH) -D__3DS__ -DMBEDTLS_CONFIG_FILE=\"updater_tls_config.h\"
+CFLAGS := -g -std=gnu11 -Os -Wall -Wextra -Werror -mword-relocations -ffunction-sections -fdata-sections -fstack-usage $(ARCH) -D__3DS__ -DMBEDTLS_CONFIG_FILE=\"updater_tls_config.h\"
 CFLAGS += $(INCLUDE)
 LDFLAGS = -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map),--gc-sections
 LIBS := -lctru -lm
@@ -30,7 +30,7 @@ export OUTPUT := $(CURDIR)/$(TARGET)
 export TOPDIR := $(CURDIR)
 export VPATH := $(CURDIR)/source $(CORE)/source $(CORE)/third_party/mbedtls/library
 export DEPSDIR := $(CURDIR)/$(BUILD)
-CFILES := $(notdir $(wildcard source/*.c)) updater_format.c updater_http.c updater_net.c updater_tls.c updater_ca.c sha256.c $(notdir $(wildcard $(CORE)/third_party/mbedtls/library/*.c))
+CFILES := $(notdir $(wildcard source/*.c)) updater_format.c updater_http.c updater_net.c updater_tls.c updater_ca.c updater_clock.c sha256.c $(notdir $(wildcard $(CORE)/third_party/mbedtls/library/*.c))
 export OFILES := $(CFILES:.c=.o)
 export INCLUDE := $(foreach dir,$(INCLUDES),-I$(if $(filter /%,$(dir)),$(dir),$(CURDIR)/$(dir))) $(foreach dir,$(LIBDIRS),-I$(dir)/include) -I$(CURDIR)/$(BUILD)
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
@@ -63,7 +63,7 @@ $(OUTPUT).bnr: $(TOPDIR)/assets/banner256x128.png $(TOPDIR)/assets/silent.wav
 	@bannertool makebanner -i $(word 1,$^) -a $(word 2,$^) -o $@
 
 $(OUTPUT).cia: $(OUTPUT).elf $(OUTPUT).smdh $(OUTPUT).bnr $(TOPDIR)/metadata.rsf
-	@makerom -f cia -o $@ -elf $(OUTPUT).elf -rsf $(TOPDIR)/metadata.rsf -icon $(OUTPUT).smdh -banner $(OUTPUT).bnr -target t -exefslogo
+	@makerom -f cia -o $@ -elf $(OUTPUT).elf -rsf $(TOPDIR)/metadata.rsf -icon $(OUTPUT).smdh -banner $(OUTPUT).bnr -target t -exefslogo -ver 1025
 
 -include $(OFILES:.o=.d)
 

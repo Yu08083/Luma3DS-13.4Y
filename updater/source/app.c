@@ -138,7 +138,10 @@ static void run(void *context)
     LightLock_Unlock(&appLock);
     UpdateHooks hooks={.cancel=cancelled,.progress=progress};
     UpdateResult result=installRequested?installRelease(&hooks):checkRelease(&hooks);
+    UpdateNetDiagnostics network;
+    UpdateNet_Diagnostics(&network);
     LightLock_Lock(&appLock);
+    view.network=network;
     view.result=result;
     view.busy=false;
     view.cancelling=false;
@@ -182,6 +185,7 @@ static bool request(bool install)
     view.stage=install?UPDATE_STAGE_DOWNLOAD:UPDATE_STAGE_RELEASE;
     view.done=0;
     view.total=0;
+    memset(&view.network,0,sizeof(view.network));
     if(!install){view.available=false;view.version[0]=0;}
     installRequested=install;
     worker=threadCreate(run,NULL,65536,0x30,-2,false);

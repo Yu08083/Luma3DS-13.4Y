@@ -10,6 +10,9 @@ typedef struct UpdateHttpResponse {
     unsigned status;
     uint32_t size;
     char location[UPDATE_MAX_URL];
+    char date[30];
+    uint32_t age;
+    bool hasAge;
 } UpdateHttpResponse;
 
 typedef int (*UpdateHttpSink)(void *,const void *,uint32_t);

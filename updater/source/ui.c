@@ -215,6 +215,7 @@ static const char *status(const UpdaterUi *ui, const UpdaterAppView *view)
             case UPDATE_STAGE_BACKUP: return local(ui, "Backing up...", "バックアップ中...");
             case UPDATE_STAGE_INSTALL: return local(ui, "Installing...", "更新中...");
             case UPDATE_STAGE_ROLLBACK: return local(ui, "Restoring...", "復元中...");
+            case UPDATE_STAGE_CLOCK: return local(ui, "Checking network time...", "日時を補正中...");
             default: return local(ui, "Checking for updates...", "更新を確認中...");
         }
     }
@@ -240,6 +241,7 @@ static const char *status(const UpdaterUi *ui, const UpdaterAppView *view)
         case UPDATE_ERR_ROLLBACK: return local(ui, "Restore failed", "復元に失敗しました");
         case UPDATE_ERR_TLS: return local(ui, "Secure connection failed", "安全な接続を確立できません");
         case UPDATE_ERR_BUSY: return local(ui, "Update is busy", "更新処理を開始できません");
+        case UPDATE_ERR_CLOCK: return local(ui, "Network time unavailable", "日時を補正できませんでした");
         default: return local(ui, "Update failed", "更新に失敗しました");
     }
 }
@@ -249,7 +251,8 @@ static uint64_t signature(const UpdaterUi *ui, const UpdaterAppView *view)
     uint64_t value = UINT64_C(14695981039346656037);
     uint32_t fields[] = {ui->japanese, ui->confirming, ui->cancel_requested, ui->dismissed,
                          view->busy, view->available, view->installing, view->cancelling, (uint32_t)view->result,
-                         view->stage, view->done, view->total};
+                         view->stage, view->done, view->total, (uint32_t)view->network.tlsError,
+                         view->network.verifyFlags, view->network.serviceResult, view->network.httpStatus};
     for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); ++i)
     {
         value ^= fields[i];
@@ -297,6 +300,7 @@ static void draw_top(const UpdaterUi *ui, const UpdaterAppView *view, const Upda
         label(surface, 24, 88, UI_GRAY, local(ui, "Latest", "最新バージョン"), 2);
         text(surface, 24, 120, UI_WHITE, view->version, sizeof(view->version), 2);
     }
+    label(surface, 24, 188, UI_GRAY, "v1.0.1", 1);
     label(surface, 24, 208, UI_GRAY, "@yu_", 1);
 }
 
@@ -310,6 +314,24 @@ static void draw_bottom(const UpdaterUi *ui, const UpdaterAppView *view, const U
         char code[24];
         snprintf(code, sizeof(code), "%s: %d", local(ui, "Error", "エラー"), (int)view->result);
         label(surface, 16, 60, UI_GRAY, code, 1);
+        char detail[64];
+        if(view->network.httpStatus)
+        {
+            snprintf(detail,sizeof(detail),"HTTP: %u",view->network.httpStatus);
+            label(surface,16,80,UI_GRAY,detail,1);
+        }
+        if(view->network.tlsError||view->network.verifyFlags||view->network.serviceResult)
+        {
+            snprintf(detail,sizeof(detail),"TLS: %08lX  Cert: %08lX",(unsigned long)(uint32_t)view->network.tlsError,(unsigned long)view->network.verifyFlags);
+            label(surface,16,100,UI_GRAY,detail,1);
+            if(view->network.serviceResult)
+            {
+                snprintf(detail,sizeof(detail),"Service: %08lX",(unsigned long)view->network.serviceResult);
+                label(surface,16,120,UI_GRAY,detail,1);
+            }
+        }
+        if(view->result==UPDATE_ERR_CLOCK)
+            label(surface,16,144,UI_GRAY,local(ui,"Check the system date and retry","本体の日付を確認して再試行"),1);
     }
     if (view->busy && view->total)
     {

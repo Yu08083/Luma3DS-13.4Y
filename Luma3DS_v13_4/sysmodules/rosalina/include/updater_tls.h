@@ -18,9 +18,14 @@ typedef struct UpdateTls {
     mbedtls_x509_crt roots;
     UpdateTlsIo io;
     int error;
-    bool ownsPool,connected;
+    uint32_t verifyFlags,clockSeen;
+    int64_t clockFrom,clockUntil;
+    bool ownsPool,connected,clockMode,clockPinned,clockInvalid;
 } UpdateTls;
 int UpdateTls_Init(UpdateTls *tls,const char *hostname,const UpdateTlsIo *io);
+int UpdateTls_InitClock(UpdateTls *tls,const UpdateTlsIo *io);
+bool UpdateTls_ConfirmClock(UpdateTls *tls,int64_t seconds);
+bool UpdateTls_DateFailure(const UpdateTls *tls);
 int UpdateTls_Handshake(UpdateTls *tls);
 int UpdateTls_Read(UpdateTls *tls,unsigned char *data,size_t size);
 int UpdateTls_Write(UpdateTls *tls,const unsigned char *data,size_t size);

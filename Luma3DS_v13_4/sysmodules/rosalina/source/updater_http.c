@@ -116,9 +116,9 @@ int UpdateHttp_Read(const UpdateHttpIo *io,uint32_t limit,UpdateHttpSink sink,vo
 {
     if(!io||!io->read||!sink||!response)return UPDATE_ERR_HTTP;
     Reader reader={.io=io};
-    char text[UPDATE_MAX_URL+32];
-    uint32_t budget=8192,length=0;
-    bool hasLength=false,chunked=false,hasEncoding=false,hasLocation=false;
+    char text[8193];
+    uint32_t budget=16384,length=0;
+    bool hasLength=false,chunked=false,hasEncoding=false,hasLocation=false,hasDate=false;
     memset(response,0,sizeof(*response));
     int result=line(&reader,text,sizeof(text),&budget);
     if(result)return result;
@@ -154,6 +154,17 @@ int UpdateHttp_Read(const UpdateHttpIo *io,uint32_t limit,UpdateHttpSink sink,vo
             if(hasLocation||strlen(value)>=sizeof(response->location))return UPDATE_ERR_HTTP;
             strcpy(response->location,value);
             hasLocation=true;
+        }
+        else if(same(name,"Date"))
+        {
+            if(hasDate||strlen(value)!=29)return UPDATE_ERR_HTTP;
+            memcpy(response->date,value,30);
+            hasDate=true;
+        }
+        else if(same(name,"Age"))
+        {
+            if(response->hasAge||!decimal(value,&response->age))return UPDATE_ERR_HTTP;
+            response->hasAge=true;
         }
     }
     if(hasLength&&chunked)return UPDATE_ERR_HTTP;
@@ -198,7 +209,7 @@ int UpdateHttp_Read(const UpdateHttpIo *io,uint32_t limit,UpdateHttpSink sink,vo
                     if(*text)
                     {
                         char *name,*value;
-                        if(!field(text,&name,&value)||same(name,"Content-Length")||same(name,"Transfer-Encoding")||same(name,"Location"))return UPDATE_ERR_HTTP;
+                        if(!field(text,&name,&value)||same(name,"Content-Length")||same(name,"Transfer-Encoding")||same(name,"Location")||same(name,"Date")||same(name,"Age"))return UPDATE_ERR_HTTP;
                     }
                 }while(*text);
                 return reader.position==reader.size?UPDATE_OK:UPDATE_ERR_HTTP;

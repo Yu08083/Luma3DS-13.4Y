@@ -90,10 +90,12 @@ int socClose(int socket)
 
 ssize_t socSend(int socket,const void *data,size_t size,int flags)
 {
-    return send(socket,data,size,flags);
+    ssize_t result=send(socket,data,size,flags);
+    return result<0?-errno:result;
 }
 
 ssize_t socRecv(int socket,void *data,size_t size,int flags)
 {
-    return recv(socket,data,size,flags);
+    ssize_t result=recv(socket,data,size,flags);
+    return result<0?-errno:result;
 }

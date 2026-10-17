@@ -20,6 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 tests/updater_ui.py
+      - run: python3 tests/updater_clock.py
+      - run: python3 tests/updater_tls.py
+      - run: python3 tests/updater_http.py
+      - run: python3 tests/updater_net.py
+      - run: python3 tests/updater_platform.py
       - run: python3 updater/tests/firm_gate.py
       - run: python3 updater/tests/app.py
       - run: python3 updater/tests/main.py
@@ -67,4 +72,5 @@ jobs:
             updater/*.elf
             updater/cia-proof.json
             updater/build/*.map
+            updater/build/*.su
           if-no-files-found: error

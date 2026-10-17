@@ -1,8 +1,10 @@
 #include "updater_tls.h"
 #include "updater_ca.h"
+#include "updater_clock.h"
 #include "mbedtls/memory_buffer_alloc.h"
 #include "mbedtls/platform.h"
 #include "mbedtls/platform_util.h"
+#include "mbedtls/sha256.h"
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -38,11 +40,44 @@ static int tlsRandom(void *context,unsigned char *data,size_t size) {
     return tls->io.random(tls->io.context,data,size);
 }
 
-int UpdateTls_Init(UpdateTls *tls,const char *hostname,const UpdateTlsIo *io) {
+static int clockVerify(void *context,mbedtls_x509_crt *certificate,int depth,uint32_t *flags) {
+    static const unsigned char pin[]={0x4B,0x62,0xD4,0x21,0xBA,0xB8,0xC9,0x48,0x39,0xC3,0xE3,0x18,0x6E,0x3E,0x4B,0x64,0xE5,0x80,0x64,0x0C,0xDA,0x78,0xD1,0x89,0xF6,0xB4,0xD3,0x73,0x81,0xA3,0xBC,0x14};
+    const uint32_t dates=MBEDTLS_X509_BADCERT_EXPIRED|MBEDTLS_X509_BADCERT_FUTURE;
+    UpdateTls *tls=context;
+    if(!certificate||depth<0||depth>=16||(tls->clockSeen&(1u<<depth))) {
+        tls->clockInvalid=true;
+        *flags|=MBEDTLS_X509_BADCERT_OTHER;
+        return 0;
+    }
+    tls->clockSeen|=1u<<depth;
+    int64_t first=UpdateClock_FromDate(certificate->valid_from.year,certificate->valid_from.mon,certificate->valid_from.day,certificate->valid_from.hour,certificate->valid_from.min,certificate->valid_from.sec);
+    int64_t last=UpdateClock_FromDate(certificate->valid_to.year,certificate->valid_to.mon,certificate->valid_to.day,certificate->valid_to.hour,certificate->valid_to.min,certificate->valid_to.sec);
+    if(first<0||last<first||(*flags&~dates))tls->clockInvalid=true;
+    if(first>tls->clockFrom)tls->clockFrom=first;
+    if(last<tls->clockUntil)tls->clockUntil=last;
+    if(depth==0) {
+        unsigned char digest[32];
+        unsigned different=0;
+        if(!certificate->pk_raw.p||!certificate->pk_raw.len||mbedtls_sha256(certificate->pk_raw.p,certificate->pk_raw.len,digest,0))tls->clockInvalid=true;
+        else {
+            for(unsigned index=0;index<sizeof(pin);++index)different|=digest[index]^pin[index];
+            tls->clockPinned=different==0;
+        }
+        mbedtls_platform_zeroize(digest,sizeof(digest));
+        if(!tls->clockPinned)tls->clockInvalid=true;
+    }
+    *flags&=~dates;
+    if(tls->clockInvalid)*flags|=MBEDTLS_X509_BADCERT_OTHER;
+    return 0;
+}
+
+static int tlsInit(UpdateTls *tls,const char *hostname,const UpdateTlsIo *io,bool clockMode) {
     if(!tls || !hostname || !*hostname || !io || !io->send || !io->receive || !io->random || !io->time || !io->milliseconds || tlsPoolBusy) return UPDATE_TLS_ERROR;
     memset(tls,0,sizeof(*tls));
     tlsPoolBusy=true;
     tls->ownsPool=true;
+    tls->clockMode=clockMode;
+    tls->clockUntil=INT64_MAX;
     tls->io=*io;
     tlsClock=tls;
     tlsPreviousTime=mbedtls_time;
@@ -68,6 +103,7 @@ int UpdateTls_Init(UpdateTls *tls,const char *hostname,const UpdateTlsIo *io) {
         mbedtls_ssl_conf_authmode(&tls->config,MBEDTLS_SSL_VERIFY_REQUIRED);
         mbedtls_ssl_conf_ca_chain(&tls->config,&tls->roots,NULL);
         mbedtls_ssl_conf_rng(&tls->config,tlsRandom,tls);
+        if(clockMode)mbedtls_ssl_conf_verify(&tls->config,clockVerify,tls);
         result=mbedtls_ssl_setup(&tls->ssl,&tls->config);
     }
     if(!result) result=mbedtls_ssl_set_hostname(&tls->ssl,hostname);
@@ -76,11 +112,30 @@ int UpdateTls_Init(UpdateTls *tls,const char *hostname,const UpdateTlsIo *io) {
     return result ? UPDATE_TLS_ERROR : 0;
 }
 
+int UpdateTls_Init(UpdateTls *tls,const char *hostname,const UpdateTlsIo *io) {
+    return tlsInit(tls,hostname,io,false);
+}
+
+int UpdateTls_InitClock(UpdateTls *tls,const UpdateTlsIo *io) {
+    return tlsInit(tls,"api.github.com",io,true);
+}
+
+bool UpdateTls_ConfirmClock(UpdateTls *tls,int64_t seconds) {
+    return tls&&tls->ownsPool&&tls->connected&&!tls->error&&!tls->verifyFlags&&tls->clockMode&&!tls->clockInvalid&&tls->clockPinned&&tls->clockSeen&&!(tls->clockSeen&(tls->clockSeen+1))&&seconds>=UPDATE_CLOCK_MIN_SECONDS&&seconds>=tls->clockFrom&&seconds<=tls->clockUntil;
+}
+
+bool UpdateTls_DateFailure(const UpdateTls *tls) {
+    const uint32_t dates=MBEDTLS_X509_BADCERT_EXPIRED|MBEDTLS_X509_BADCERT_FUTURE;
+    return tls&&tls->ownsPool&&!tls->clockMode&&!tls->connected&&tls->error==MBEDTLS_ERR_X509_CERT_VERIFY_FAILED&&tls->verifyFlags&&!(tls->verifyFlags&~dates);
+}
+
 int UpdateTls_Handshake(UpdateTls *tls) {
     if(!tls || !tls->ownsPool || tls->error) return UPDATE_TLS_ERROR;
     int result=mbedtls_ssl_handshake(&tls->ssl);
+    tls->verifyFlags=mbedtls_ssl_get_verify_result(&tls->ssl);
     if(result==MBEDTLS_ERR_SSL_WANT_READ || result==MBEDTLS_ERR_SSL_WANT_WRITE) return 0;
     if(!result && (mbedtls_ssl_get_verify_result(&tls->ssl) || !mbedtls_ssl_get_peer_cert(&tls->ssl))) result=MBEDTLS_ERR_X509_CERT_VERIFY_FAILED;
+    if(!result&&tls->clockMode&&(!tls->clockPinned||tls->clockInvalid||!tls->clockSeen||(tls->clockSeen&(tls->clockSeen+1))||tls->clockFrom>tls->clockUntil))result=MBEDTLS_ERR_X509_CERT_VERIFY_FAILED;
     if(result) {tls->error=result;return UPDATE_TLS_ERROR;}
     tls->connected=true;
     return 1;

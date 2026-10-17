@@ -15,6 +15,7 @@ def main():
     '3ds.h':r"""#pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 typedef uint32_t u32;
 typedef int32_t Result;
 #define R_FAILED(r) ((r)<0)
@@ -75,12 +76,15 @@ int (*random)(void *,unsigned char *,size_t);
 int64_t (*time)(void *);
 int64_t (*milliseconds)(void *);
 } UpdateTlsIo;
-typedef struct UpdateTls {UpdateTlsIo io;int open;} UpdateTls;
+typedef struct UpdateTls {UpdateTlsIo io;int open,error;uint32_t verifyFlags;bool clock;} UpdateTls;
 int UpdateTls_Init(UpdateTls *,const char *,const UpdateTlsIo *);
 int UpdateTls_Handshake(UpdateTls *);
 int UpdateTls_Read(UpdateTls *,unsigned char *,size_t);
 int UpdateTls_Write(UpdateTls *,const unsigned char *,size_t);
 void UpdateTls_Close(UpdateTls *);
+int UpdateTls_InitClock(UpdateTls *,const UpdateTlsIo *);
+bool UpdateTls_ConfirmClock(UpdateTls *,int64_t);
+bool UpdateTls_DateFailure(const UpdateTls *);
 """,
     'fixture.c':r"""#include <stdio.h>
 #include <stdlib.h>
@@ -89,6 +93,7 @@ void UpdateTls_Close(UpdateTls *);
 #include "minisoc.h"
 #include "updater_tls.h"
 #include "updater_net.h"
+#include NET_SOURCE
 static unsigned checks;
 #define CHECK(v) do{++checks;if(!(v)){fprintf(stderr,"line %d: %s\n",__LINE__,#v);exit(1);}}while(0)
 static const char *responses[8];
@@ -99,12 +104,13 @@ static char requestText[8192],hostname[64],output[65536];
 static unsigned requestUsed;
 static void reset(void){
 memset(responses,0,sizeof(responses));requests=responseOffset=received=closed=initCount=exitCount=psCount=psExitCount=tlsCloseCount=tlsOpenCount=cancelledAfter=operations=mode=requestUsed=0;ticks=0;requestText[0]=output[0]=hostname[0]=0;
+clockReady=false;clockUtc=0;clockTick=0;
 }
 uint64_t svcGetSystemTick(void){ticks+=268123;return ticks;}
 void svcSleepThread(int64_t n){ticks+=(uint64_t)n*268123/1000000;}
 int psInit(void){++psCount;return mode==2?-1:0;}
 void psExit(void){++psExitCount;}
-int PS_GenerateRandomBytes(void *p,size_t n){memset(p,1,n);return mode==13?-1:0;}
+int PS_GenerateRandomBytes(void *p,size_t n){memset(p,1,n);return mode==13||mode==25?-1:0;}
 uint64_t osGetTime(void){return 3990000000000ULL;}
 uint16_t htons(uint16_t x){return (uint16_t)(x>>8|x<<8);}
 int miniSocInit(void){++initCount;return mode==1?-1:0;}
@@ -117,8 +123,15 @@ int socPoll(struct pollfd *fds,unsigned n,int timeout){CHECK(n==1&&timeout==0);+
 int socSend(int fd,const void *data,size_t n,int flags){CHECK(fd>=100&&flags==0);if(mode==9)return -1;if(requestUsed+n>=sizeof(requestText))return -1;memcpy(requestText+requestUsed,data,n);requestUsed+=(unsigned)n;requestText[requestUsed]=0;return (int)n;}
 int socRecv(int fd,void *data,size_t n,int flags){CHECK(fd>=100&&flags==0);if(mode==10)return -1;const char *s=responses[requests-1];if(!s)return 0;size_t total=strlen(s);if(responseOffset>=total)return 0;size_t count=total-responseOffset;if(count>n)count=n;if(count>37)count=37;memcpy(data,s+responseOffset,count);responseOffset+=(unsigned)count;return (int)count;}
 int socClose(int fd){CHECK(fd>=100);++closed;return 0;}
-int UpdateTls_Init(UpdateTls *t,const char *name,const UpdateTlsIo *io){CHECK(!strcmp(name,hostname));t->io=*io;t->open=1;++tlsOpenCount;return mode==11?-2:0;}
-int UpdateTls_Handshake(UpdateTls *t){unsigned char b[16];if(t->io.random(t->io.context,b,sizeof(b)))return -2;CHECK(t->io.time(t->io.context)>0);return mode==12?-2:1;}
+int UpdateTls_Init(UpdateTls *t,const char *name,const UpdateTlsIo *io){CHECK(!strcmp(name,hostname));memset(t,0,sizeof(*t));t->io=*io;t->open=1;++tlsOpenCount;return mode==11?-2:0;}
+int UpdateTls_InitClock(UpdateTls *t,const UpdateTlsIo *io){CHECK(!strcmp(hostname,"api.github.com"));int result=UpdateTls_Init(t,"api.github.com",io);t->clock=true;return result;}
+bool UpdateTls_DateFailure(const UpdateTls *t){return t->verifyFlags==1;}
+bool UpdateTls_ConfirmClock(UpdateTls *t,int64_t utc){CHECK(t->clock);return utc>=1792249200LL&&utc<1795823999LL;}
+int UpdateTls_Handshake(UpdateTls *t){
+if(mode>=16&&!t->clock&&(!clockReady||mode==22)){t->error=-9984;t->verifyFlags=mode==18?8:1;return -2;}
+if(t->clock&&mode==17){t->error=-9984;t->verifyFlags=8;return -2;}
+if(t->clock&&mode==23)cancelledAfter=operations;
+unsigned char b[16];if(t->io.random(t->io.context,b,sizeof(b)))return -2;CHECK(t->io.time(t->io.context)>0);return mode==12?-2:1;}
 int UpdateTls_Write(UpdateTls *t,const unsigned char *p,size_t n){int x=t->io.send(t->io.context,p,n);return x==MBEDTLS_ERR_SSL_WANT_WRITE?-1:x<0?-2:x;}
 int UpdateTls_Read(UpdateTls *t,unsigned char *p,size_t n){int x=t->io.receive(t->io.context,p,n);return x==MBEDTLS_ERR_SSL_WANT_READ?-1:x<0?-2:x;}
 void UpdateTls_Close(UpdateTls *t){if(t->open){++tlsCloseCount;t->open=0;}}
@@ -138,6 +151,22 @@ reset();for(unsigned i=0;i<8;++i)responses[i]="HTTP/1.1 302 Found\r\nLocation: h
 for(unsigned at=1;at<7;++at){reset();responses[0]="HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";cancelledAfter=at;int value=get(5);CHECK(value==UPDATE_CANCELLED);balance();}
 reset();responses[0]="HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nhello!";CHECK(get(5)==UPDATE_ERR_SIZE);balance();
 reset();CHECK(UpdateNet_Get("http://github.com/a",5,sink,0,&hooks)==UPDATE_ERR_URL&&initCount==0);
+for(unsigned m=16;m<=25;++m){
+reset();mode=m;
+const char *date=m==19?"Sat, 31 Feb 2026 16:00:00 GMT":"Sat, 17 Oct 2026 16:00:00 GMT";
+char clockResponse[512];
+snprintf(clockResponse,sizeof(clockResponse),"HTTP/1.1 200 OK\r\n%s%s%s%sContent-Length: 2\r\n\r\n{}",m==24?"":"Date: ",m==24?"":date,m==24?"":"\r\n",m==20?"Age: 1\r\n":"Age: 0\r\n");
+if(m==21)strcpy(clockResponse,"HTTP/1.1 302 Found\r\nLocation: https://github.com/evil\r\n\r\n");
+responses[1]=clockResponse;responses[2]="HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
+int result=get(5);
+CHECK(result==(m==16?UPDATE_OK:m==18||m==22||m==25?UPDATE_ERR_TLS:m==23?UPDATE_CANCELLED:UPDATE_ERR_CLOCK));
+CHECK(requests==(m==18||m==25?1:m==16||m==22?3:2));
+CHECK(received==(m==16?5:0));
+if(m==16){CHECK(clockReady);CHECK(strstr(requestText,"GET /?luma-clock=0101010101010101 HTTP/1.1"));CHECK(strstr(requestText,"Cache-Control: no-cache, no-store"));}
+UpdateNetDiagnostics d;UpdateNet_Diagnostics(&d);CHECK(d.clockAdjusted==(m==16||m==22));
+if(m==25)CHECK(d.serviceResult==UINT32_MAX);
+balance();
+}
 printf("%u\n",checks);return 0;
 }
 """
@@ -146,13 +175,13 @@ printf("%u\n",checks);return 0;
     compiler='C:/msys64/ucrt64/bin/gcc.exe' if os.name=='nt' else os.environ.get('CC','cc')
     env=dict(os.environ);env['PATH']=str(Path(compiler).parent)+os.pathsep+env.get('PATH','')
     target=OUT/('fixture.exe' if os.name=='nt' else 'fixture')
-    sources=[ROS/'source/updater_net.c',ROS/'source/updater_http.c',ROS/'source/updater_format.c',OUT/'fixture.c']
-    result=subprocess.run([compiler,'-std=c11','-O2','-Wall','-Wextra','-Werror','-I'+str(OUT),'-I'+str(ROS/'include'),*map(str,sources),'-o',str(target)],env=env,capture_output=True,text=True)
+    sources=[ROS/'source/updater_http.c',ROS/'source/updater_format.c',ROS/'source/updater_clock.c',OUT/'fixture.c']
+    result=subprocess.run([compiler,'-std=c11','-O2','-Wall','-Wextra','-Werror','-I'+str(OUT),'-I'+str(ROS/'include'),'-DNET_SOURCE="'+str(ROS/'source/updater_net.c').replace('\\','/')+'"',*map(str,sources),'-o',str(target)],env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
     result=subprocess.run([str(target)],env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
     checks=int(result.stdout.strip())
-    report=dict(result='pass',checks=checks,source_sha256={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in sources[:3]},hardware_tested=False,boundary='actual network/HTTP/URL code; mock miniSoc and TLS engine; crypto verified separately by updater_tls.py')
+    report=dict(result='pass',checks=checks,source_sha256={x.name:hashlib.sha256(x.read_bytes()).hexdigest() for x in sources[:3]+[ROS/'source/updater_net.c']},hardware_tested=False,boundary='actual network/HTTP/URL/clock code; mock miniSoc and TLS engine; crypto verified separately by updater_tls.py')
     (OUT.parent/'net-proof.json').write_bytes((json.dumps(report,indent=2)+'\n').encode())
     print(json.dumps(report))
 

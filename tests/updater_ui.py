@@ -128,7 +128,7 @@ static void input_tests(void)
     CHECK(UpdaterUi_Input(&ui, &view, UI_KEY_A) == UPDATER_UI_NONE);
     CHECK(UpdaterUi_Input(&ui, &view, UI_KEY_B) == UPDATER_UI_CANCEL);
     CHECK(UpdaterUi_Input(&ui, &view, UI_KEY_B) == UPDATER_UI_NONE);
-    for (int stage = UPDATE_STAGE_NONE; stage <= UPDATE_STAGE_DONE; ++stage)
+    for (int stage = UPDATE_STAGE_NONE; stage <= UPDATE_STAGE_CLOCK; ++stage)
     {
         UpdaterUi_Init(&ui, true);
         view.stage = (UpdateStage)stage;
@@ -192,8 +192,8 @@ static void drawing_tests(void)
         CHECK(hash(&top_a.surface) == previous);
     }
     for (unsigned language = 0; language < 2; ++language)
-        for (int result = UPDATE_ERR_BUSY; result <= UPDATE_CURRENT; ++result)
-            for (int stage = UPDATE_STAGE_NONE; stage <= UPDATE_STAGE_DONE; ++stage)
+        for (int result = UPDATE_ERR_CLOCK; result <= UPDATE_CURRENT; ++result)
+            for (int stage = UPDATE_STAGE_NONE; stage <= UPDATE_STAGE_CLOCK; ++stage)
             {
                 UpdaterUi_Init(&ui, language != 0);
                 view.busy = stage != UPDATE_STAGE_NONE && stage != UPDATE_STAGE_DONE;
@@ -250,6 +250,16 @@ static void drawing_tests(void)
     view.stage = UPDATE_STAGE_DONE;
     view.result = UPDATE_ERR_TLS;
     snapshot("english-error.ppm", &ui, &view);
+    ui.japanese = true;
+    view.network.tlsError = -9984;
+    view.network.verifyFlags = 0x400;
+    view.network.httpStatus = 403;
+    snapshot("japanese-diagnostics.ppm", &ui, &view);
+    view.result = UPDATE_ERR_CLOCK;
+    snapshot("japanese-clock-error.ppm", &ui, &view);
+    view.busy = true;
+    view.stage = UPDATE_STAGE_CLOCK;
+    snapshot("japanese-clock.ppm", &ui, &view);
 }
 
 int main(void)

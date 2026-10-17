@@ -16,7 +16,7 @@ class Io(c.Structure):
     _fields_=[('context',c.c_void_p),('read',READ)]
 
 class Response(c.Structure):
-    _fields_=[('status',c.c_uint),('size',c.c_uint32),('location',c.c_char*2048)]
+    _fields_=[('status',c.c_uint),('size',c.c_uint32),('location',c.c_char*2048),('date',c.c_char*30),('age',c.c_uint32),('hasAge',c.c_bool)]
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
@@ -86,6 +86,12 @@ def main():
     assert run(wire+b'extra')[0]<0
     for tail in (b'X\r\n',b'100000000\r\n',b'-1\r\n',b';x\r\n',b'1\r\nx\n0\r\n\r\n',b'0\r\nContent-Length: 0\r\n\r\n',b'0\r\nTransfer-Encoding: chunked\r\n\r\n',b'0\r\nLocation: https://github.com/\r\n\r\n'):
         assert run(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n'+tail)[0]<0
+    long_header=b"Content-Security-Policy: "+b"default-src 'none'; "*200
+    redirect=b'HTTP/1.1 302 Found\r\nLocation: https://release-assets.githubusercontent.com/a?'+b'x'*900+b'\r\n'+long_header+b'\r\nDate: Sat, 17 Oct 2026 16:00:00 GMT\r\nAge: 0\r\nContent-Length: 0\r\n\r\n'
+    value,data,response=run(redirect,fragment=37)
+    assert value==0 and response.status==302 and len(response.location)>900 and response.date==b'Sat, 17 Oct 2026 16:00:00 GMT' and response.hasAge and response.age==0
+    for headers in (b'Date: x',b'Date: Sat, 17 Oct 2026 16:00:00 GMT\r\nDate: Sat, 17 Oct 2026 16:00:00 GMT',b'Age: -1',b'Age: 4294967296',b'Age: 0\r\nAge: 0'):
+        assert run(b'HTTP/1.1 200 OK\r\n'+headers+b'\r\nContent-Length: 0\r\n\r\n')[0]<0
     rng=random.Random(134)
     for _ in range(1200):
         payload=rng.randbytes(rng.randrange(0,3000))

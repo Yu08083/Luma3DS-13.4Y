@@ -26,6 +26,7 @@ jobs:
       - run: python3 tests/theme_menu.py
       - run: python3 tests/firm_modules.py
       - run: python3 tests/updater_format.py
+      - run: python3 tests/updater_clock.py
       - run: python3 tests/updater_tls.py
       - run: python3 tests/updater_http.py
       - run: python3 tests/updater_storage.py

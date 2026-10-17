@@ -7,6 +7,7 @@
 #include "minisoc.h"
 #include "updater_net.h"
 #include "updater_tls.h"
+#include "updater_clock.h"
 
 typedef struct Connection {
     int socket;
@@ -15,6 +16,11 @@ typedef struct Connection {
     int failure;
     UpdateTls tls;
 } Connection;
+
+static UpdateNetDiagnostics diagnostics;
+static int64_t clockUtc;
+static uint64_t clockTick;
+static bool clockReady;
 
 static uint64_t milliseconds(void)
 {
@@ -51,6 +57,7 @@ static int sendBytes(void *context,const unsigned char *data,size_t size)
     if(available<0)return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
     if(!available)return MBEDTLS_ERR_SSL_WANT_WRITE;
     int result=(int)socSend(connection->socket,data,size,0);
+    if(result==-EAGAIN||result==-EWOULDBLOCK||result==-EINTR)return MBEDTLS_ERR_SSL_WANT_WRITE;
     if(result<=0){connection->failure=UPDATE_ERR_NETWORK;return MBEDTLS_ERR_SSL_INTERNAL_ERROR;}
     connection->idle=milliseconds()+15000;
     return result;
@@ -63,6 +70,7 @@ static int receiveBytes(void *context,unsigned char *data,size_t size)
     if(available<0)return MBEDTLS_ERR_SSL_INTERNAL_ERROR;
     if(!available)return MBEDTLS_ERR_SSL_WANT_READ;
     int result=(int)socRecv(connection->socket,data,size,0);
+    if(result==-EAGAIN||result==-EWOULDBLOCK||result==-EINTR)return MBEDTLS_ERR_SSL_WANT_READ;
     if(result<0){connection->failure=UPDATE_ERR_NETWORK;return MBEDTLS_ERR_SSL_INTERNAL_ERROR;}
     if(result)connection->idle=milliseconds()+15000;
     return result;
@@ -72,7 +80,9 @@ static int randomBytes(void *context,unsigned char *data,size_t size)
 {
     Connection *connection=context;
     if(cancelled(connection->hooks)){connection->failure=UPDATE_CANCELLED;return -1;}
-    return R_SUCCEEDED(PS_GenerateRandomBytes(data,size))?0:-1;
+    Result result=PS_GenerateRandomBytes(data,size);
+    if(R_FAILED(result))diagnostics.serviceResult=(uint32_t)result;
+    return R_SUCCEEDED(result)?0:-1;
 }
 
 static int64_t elapsedMilliseconds(void *context)
@@ -84,6 +94,7 @@ static int64_t elapsedMilliseconds(void *context)
 static int64_t utcSeconds(void *context)
 {
     (void)context;
+    if(clockReady)return clockUtc+(int64_t)((milliseconds()-clockTick)/1000);
     uint64_t seconds=osGetTime()/1000;
     return seconds>=2208988800ULL?(int64_t)(seconds-2208988800ULL):-1;
 }
@@ -141,7 +152,7 @@ static int connectSocket(Connection *connection,const char *host)
     return UPDATE_ERR_NETWORK;
 }
 
-static int request(Connection *connection,const char *url,uint32_t limit,UpdateHttpSink sink,void *context,UpdateHttpResponse *response)
+static int request(Connection *connection,const char *url,uint32_t limit,UpdateHttpSink sink,void *context,UpdateHttpResponse *response,bool clock)
 {
     const char *path=strchr(url+8,'/');
     if(!path)return UPDATE_ERR_URL;
@@ -151,11 +162,11 @@ static int request(Connection *connection,const char *url,uint32_t limit,UpdateH
     memcpy(host,url+8,hostSize);
     host[hostSize]=0;
     if(connection->hooks&&connection->hooks->progress)
-        connection->hooks->progress(connection->hooks->context,UPDATE_STAGE_CONNECT,0,0);
+        connection->hooks->progress(connection->hooks->context,clock?UPDATE_STAGE_CLOCK:UPDATE_STAGE_CONNECT,0,0);
     int result=connectSocket(connection,host);
     if(result)return result;
     UpdateTlsIo io={.context=connection,.send=sendBytes,.receive=receiveBytes,.random=randomBytes,.time=utcSeconds,.milliseconds=elapsedMilliseconds};
-    if(UpdateTls_Init(&connection->tls,host,&io))return UPDATE_ERR_TLS;
+    if(clock?UpdateTls_InitClock(&connection->tls,&io):UpdateTls_Init(&connection->tls,host,&io))return UPDATE_ERR_TLS;
     for(;;)
     {
         result=UpdateTls_Handshake(&connection->tls);
@@ -165,7 +176,7 @@ static int request(Connection *connection,const char *url,uint32_t limit,UpdateH
         svcSleepThread(10000000);
     }
     char headers[UPDATE_MAX_URL+256];
-    int bytes=snprintf(headers,sizeof(headers),"GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Luma3DS-13.4Y\r\nAccept: application/vnd.github+json\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n",path,host);
+    int bytes=snprintf(headers,sizeof(headers),"GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Luma3DS-13.4Y\r\nAccept: application/vnd.github+json\r\nAccept-Encoding: identity\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n",path,host);
     if(bytes<0||(size_t)bytes>=sizeof(headers))return UPDATE_ERR_URL;
     size_t sent=0;
     while(sent<(size_t)bytes)
@@ -184,27 +195,98 @@ static int request(Connection *connection,const char *url,uint32_t limit,UpdateH
     return UpdateHttp_Read(&http,limit,sink,context,response);
 }
 
+static void capture(Connection *connection,const UpdateHttpResponse *response)
+{
+    diagnostics.tlsError=connection->tls.error;
+    diagnostics.verifyFlags=connection->tls.verifyFlags;
+    diagnostics.httpStatus=response->status;
+    diagnostics.utc=utcSeconds(NULL);
+    diagnostics.clockAdjusted=clockReady;
+}
+
+static void closeConnection(Connection *connection)
+{
+    UpdateTls_Close(&connection->tls);
+    if(connection->socket>=0)socClose(connection->socket);
+    connection->socket=-1;
+}
+
+static int discard(void *context,const void *data,uint32_t size)
+{
+    (void)context;(void)data;(void)size;
+    return UPDATE_OK;
+}
+
+static int synchronizeClock(Connection *connection)
+{
+    unsigned char nonce[8];
+    if(randomBytes(connection,nonce,sizeof(nonce)))return connection->failure?connection->failure:UPDATE_ERR_TLS;
+    char url[80];
+    static const char hex[]="0123456789abcdef";
+    strcpy(url,"https://api.github.com/?luma-clock=");
+    size_t offset=strlen(url);
+    for(unsigned i=0;i<sizeof(nonce);++i)
+    {
+        url[offset++]=hex[nonce[i]>>4];
+        url[offset++]=hex[nonce[i]&15];
+    }
+    url[offset]=0;
+    connection->failure=0;
+    connection->idle=milliseconds()+15000;
+    UpdateHttpResponse response={0};
+    int result=request(connection,url,32768,discard,NULL,&response,true);
+    int64_t utc=0;
+    if(!result&&(response.status!=200||(response.hasAge&&response.age)||!UpdateClock_ParseHttpDate(response.date,&utc)||!UpdateTls_ConfirmClock(&connection->tls,utc)))result=UPDATE_ERR_CLOCK;
+    capture(connection,&response);
+    closeConnection(connection);
+    if(result)return result==UPDATE_ERR_TLS||result==UPDATE_ERR_HTTP?UPDATE_ERR_CLOCK:result;
+    clockUtc=utc;
+    clockTick=milliseconds();
+    clockReady=true;
+    diagnostics.clockAdjusted=true;
+    diagnostics.utc=utc;
+    return UPDATE_OK;
+}
+
+void UpdateNet_Diagnostics(UpdateNetDiagnostics *out)
+{
+    if(out)*out=diagnostics;
+}
+
 int UpdateNet_Get(const char *initial,uint32_t limit,UpdateHttpSink sink,void *context,const UpdateHooks *hooks)
 {
+    memset(&diagnostics,0,sizeof(diagnostics));
     if(!Update_TrustedUrl(initial)||!sink)return UPDATE_ERR_URL;
     if(cancelled(hooks))return UPDATE_CANCELLED;
-    if(R_FAILED(miniSocInit()))return UPDATE_ERR_NETWORK;
-    if(R_FAILED(psInit())){miniSocExit();return UPDATE_ERR_TLS;}
+    Result service=miniSocInit();
+    if(R_FAILED(service)){diagnostics.serviceResult=(uint32_t)service;return UPDATE_ERR_NETWORK;}
+    service=psInit();
+    if(R_FAILED(service)){diagnostics.serviceResult=(uint32_t)service;miniSocExit();return UPDATE_ERR_TLS;}
     char url[UPDATE_MAX_URL];
     strcpy(url,initial);
     Connection connection={.socket=-1,.hooks=hooks,.deadline=milliseconds()+120000};
     int result=UPDATE_ERR_HTTP;
-    for(unsigned redirect=0;redirect<=5;++redirect)
+    unsigned redirect=0;
+    bool triedClock=false;
+    for(;;)
     {
         connection.failure=0;
         connection.idle=milliseconds()+15000;
-        UpdateHttpResponse response;
-        result=request(&connection,url,limit,sink,context,&response);
-        UpdateTls_Close(&connection.tls);
-        if(connection.socket>=0)socClose(connection.socket);
-        connection.socket=-1;
+        UpdateHttpResponse response={0};
+        result=request(&connection,url,limit,sink,context,&response,false);
+        bool adjust=result==UPDATE_ERR_TLS&&!triedClock&&UpdateTls_DateFailure(&connection.tls);
+        capture(&connection,&response);
+        closeConnection(&connection);
+        if(adjust)
+        {
+            triedClock=true;
+            result=synchronizeClock(&connection);
+            if(result)break;
+            continue;
+        }
         if(result||response.status==200)break;
         if(redirect==5){result=UPDATE_ERR_URL;break;}
+        ++redirect;
         if(response.location[0]=='/')
         {
             if(response.location[1]=='/'){result=UPDATE_ERR_URL;break;}
