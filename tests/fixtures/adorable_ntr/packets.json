@@ -1,0 +1,35 @@
+{
+  "packets": [
+    "78563412e803000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "78563412d00700000000000085030000050100003c000000690000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "events": [
+    [
+      "write",
+      84
+    ],
+    [
+      "write",
+      84
+    ],
+    [
+      "end"
+    ],
+    [
+      "destroy"
+    ],
+    [
+      "stop-heartbeat"
+    ],
+    [
+      "reconnect-delay",
+      3000
+    ]
+  ],
+  "repository": "https://github.com/Auth-Xero/cuteNTR-react",
+  "commit": "4be9fd70dca6e5de914bd83b3091a359b98b24ef",
+  "release": "1.0.0",
+  "source": "components/ntr/Ntr.tsx",
+  "source_sha256": "a4007eaf48dcfab23c57aff7bbb1d68dff31c858e4680e3c2eb4beb9547ddffc",
+  "method": "Actual sendPacket, remotePlay and disconnectFromDS method bodies executed in Node; socket and timer recorded, no network"
+}

@@ -31,9 +31,9 @@ pairs = [tuple(ast.literal_eval(value) for value in match) for match in re.finda
     r'\{\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")\s*\}', table)]
 assert [english for english, _ in pairs] == sorted({english for english, _ in pairs})
 translations = dict(pairs)
-for label in ['Screen capture (wireless)', 'State: %s', 'OFF', 'Streaming', 'Waiting for viewer',
+for label in ['Screen capture (wireless)', 'Close Rosalina to stream video', 'State: %s', 'OFF', 'Streaming', 'Waiting for viewer',
               'Paused (offline)', '3DS IP: %s', 'Viewer IP: %s', 'FPS: %lu   Quality: %lu',
-              'Waiting for Wi-Fi.', 'PC viewer: NTR mode', 'Starting...', 'Stopping...',
+              'Waiting for Wi-Fi.', 'Receiver: NTR mode', 'Starting...', 'Stopping...',
               'A: start     B: back', 'A: stop      B: back', 'Operation failed (0x%08lx).']:
     assert label in translations
 glyph_header = (module / 'include/japanese_font.h').read_text()
@@ -165,11 +165,13 @@ int main(void)
         CHECK(contains(0,language?"A: 開始":"A: start"));colors(0);
         reset(true);g_language=(LangCode)language;status.fps=status.quality=UINT32_MAX;N3DSMenu_Streaming();
         CHECK(frame_count==1&&save_count==1&&ip_count==1);
+        CHECK(contains(0,language?"Rosalinaを閉じる":"Close Rosalina"));
         CHECK(contains(0,"10.1.2.3")&&contains(0,"5.6.7.8")&&contains(0,"4294967295"));colors(0);
         reset(true);g_language=(LangCode)language;status.noNetwork=true;N3DSMenu_Streaming();
         CHECK(ip_count==0&&save_count==1&&contains(0,language?"一時停止":"Paused"));
         CHECK(contains(0,language?"Wi-Fiの接続待ち":"Waiting for Wi-Fi"));
         CHECK(!contains(0,"10.1.2.3")&&!contains(0,"5.6.7.8"));
+        CHECK(!contains(0,language?"Rosalinaを閉じる":"Close Rosalina"));
         reset(false);g_language=(LangCode)language;key_count=2;keys[0]=KEY_A;keys[1]=KEY_B;N3DSMenu_Streaming();
         CHECK(start_count==1&&stop_count==0&&save_count==1&&frame_count==3);
         CHECK(contains(1,language?"開始中":"Starting"));CHECK(contains(2,language?"接続待ち":"Waiting for viewer"));

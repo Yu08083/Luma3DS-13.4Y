@@ -12,7 +12,7 @@ Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作�
 - メニュー操作: 長押し開始までの時間・連続移動の間隔などを設定できます。
 - 背景テーマ: `SD:/3ds/luma/RosaliaTheme/` に画像を置き、メニューで選びます。PNG・無圧縮BMP・ベースラインJPEG、最大1024×1024・4MB。320×240を推奨します。
 - FTP: Wi-Fiへ接続して開始し、接続待ちになったら表示IPのポート `5000` へ接続します。暗号化なし・パッシブモードを指定します。
-- 画面キャプチャ（New 3DS / New 2DS）: Rosalinaの `Screen capture (wireless)... / 画面キャプチャ (無線)...` を開き、Aで開始します。同じネットワークのPCでSnickerstreamまたはChokistreamのNTRモードを使い、表示された本体IPへ接続します。映像のみ対応します。Aで停止、Bでメニューへ戻ります。
+- 画面キャプチャ（New 3DS / New 2DS）: Rosalinaの `Screen capture (wireless)... / 画面キャプチャ (無線)...` を開き、Aで開始します。同じネットワークの受信アプリをNTRモードにし、表示された本体IPへ接続します。PCではSnickerstream・Chokistream、AndroidではAdorableNTRのNTR方式を使います。開始後はRosalinaを閉じてゲーム画面へ戻ります。Aで停止します。HzMod方式には対応していません。映像のみ対応します。
 
 画面転送にはTCP `8000`・UDP `8001` を使います。Rosalina操作中・スリープ中・Wi-Fi切断中は一時停止します。
 

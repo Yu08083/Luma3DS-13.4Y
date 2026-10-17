@@ -37,6 +37,7 @@ jobs:
       - run: python3 tests/online_bridge.py
       - run: python3 -m pip install unicorn==2.1.4 Pillow==12.3.0
       - run: python3 tests/streaming.py
+      - run: python3 tests/adorable_ntr.py
       - run: python3 tests/streaming_jpeg.py
       - run: python3 tests/streaming_platform.py
       - run: python3 tests/streaming_menu.py

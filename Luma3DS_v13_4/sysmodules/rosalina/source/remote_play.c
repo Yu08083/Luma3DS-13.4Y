@@ -157,6 +157,7 @@ typedef struct ControlConn
     u8 header[NTR_HEADER_SIZE];
     u32 headerGot;
     u32 exdataLeft;
+    bool closing;
     u8 reply[NTR_HEADER_SIZE];
     u32 replySize, replySent;
     u64 lastProgress;
@@ -369,7 +370,7 @@ static bool readFromConn(ControlConn *c)
         u32 want = c->exdataLeft < sizeof(scratch) ? c->exdataLeft : sizeof(scratch);
         n = socRecv(c->sock, scratch, want, 0);
         if (n <= 0)
-            return transient(n);
+            return n == -EINTR || (!c->closing && transient(n));
         c->lastProgress = svcGetSystemTick();
         c->exdataLeft -= n;
         return true;
@@ -377,7 +378,7 @@ static bool readFromConn(ControlConn *c)
 
     n = socRecv(c->sock, c->header + c->headerGot, NTR_HEADER_SIZE - c->headerGot, 0);
     if (n <= 0)
-        return transient(n);
+        return n == -EINTR || (!c->closing && transient(n));
     c->lastProgress = svcGetSystemTick();
     c->headerGot += n;
     if (c->headerGot < NTR_HEADER_SIZE)
@@ -452,7 +453,7 @@ static void controlThreadMain(void)
 
         struct pollfd fds[2] = {
             { .fd = listenSock, .events = POLLIN },
-            { .fd = conn.sock, .events = conn.replySize ? POLLOUT : POLLIN },
+            { .fd = conn.sock, .events = POLLIN | (conn.replySize ? POLLOUT : 0) },
         };
         nfds_t nfds = conn.sock >= 0 ? 2 : 1;
 
@@ -462,6 +463,8 @@ static void controlThreadMain(void)
             continue;
         }
         int res = socPoll(fds, nfds, 0);
+        if (stopRequested || preTerminationRequested)
+            break;
         if (res < -10000)
             break;
         if (res <= 0)
@@ -496,8 +499,16 @@ static void controlThreadMain(void)
         }
         else if (nfds == 2 && (fds[1].revents & (POLLIN | POLLOUT | POLLHUP | POLLERR | POLLNVAL)))
         {
-            if ((fds[1].revents & (POLLHUP | POLLERR | POLLNVAL)) ||
-                !(conn.replySize ? writeToConn(&conn) : readFromConn(&conn)))
+            if (fds[1].revents & POLLNVAL)
+                closeSocket(&conn.sock);
+            else if (fds[1].revents & (POLLIN | POLLHUP | POLLERR))
+            {
+                if (fds[1].revents & (POLLHUP | POLLERR))
+                    conn.closing = true;
+                if (!readFromConn(&conn))
+                    closeSocket(&conn.sock);
+            }
+            else if ((fds[1].revents & POLLOUT) && conn.replySize != 0 && !writeToConn(&conn))
                 closeSocket(&conn.sock);
         }
     }
