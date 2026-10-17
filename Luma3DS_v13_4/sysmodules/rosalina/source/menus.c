@@ -89,7 +89,7 @@ Menu rosalinaMenu = {
 
 bool rosalinaMenuShouldShowDebugInfo(void)
 {
-
+    
 
     s64 out;
     svcGetSystemInfo(&out, 0x10000, 0x200);
@@ -143,7 +143,7 @@ void RosalinaMenu_PowerOffOrReboot(void)
         }
         else if(pressed & KEY_A)
         {
-
+            
             menuLeave();
             srvPublishToSubscriber(0x203, 0);
             return;
@@ -173,7 +173,7 @@ static bool chainloadVersionFlagSet(const char *version)
                            FS_OPEN_CREATE | FS_OPEN_WRITE)))
         return false;
 
-
+    
     char buf[4];
     u32 len = strlen(version);
 
@@ -199,7 +199,7 @@ bool chainloadVersionFirmExists(const char *version)
 
     IFile_GetSize(&f, &size);
 
-
+    
     u64 total = 0;
     char magic[4] = {0};
     bool ok = size > 0x200
@@ -258,7 +258,7 @@ void RosalinaMenu_ChainloadVersionToggle(void)
                 return;
             }
 
-
+            
             if(!chainloadVersionFlagSet(target))
             {
                 LogLine("[バージョン切り替え: SD への書き込みに失敗しました] / [version switch: SD write failed]");
@@ -412,8 +412,8 @@ static Result RosalinaMenu_WriteScreenshot(IFile *file, u32 width, bool top, boo
     Result res = 0;
     u32 lineSize = 3 * width;
 
-
-
+    
+    
     u32 scaleFactorY = width > 400 ? 2 : 1;
     u32 numLinesScaled = 240 * scaleFactorY;
     u32 remaining = lineSize * numLinesScaled;
@@ -429,7 +429,7 @@ static Result RosalinaMenu_WriteScreenshot(IFile *file, u32 width, bool top, boo
     buf += headerSize;
 
     u32 y = 0;
-
+    
     while (remaining != 0)
     {
         s64 t0 = svcGetSystemTick();
@@ -440,7 +440,7 @@ static Result RosalinaMenu_WriteScreenshot(IFile *file, u32 width, bool top, boo
 
         s64 t1 = svcGetSystemTick();
         timeSpentConvertingScreenshot += t1 - t0;
-        TRY(IFile_Write(file, &total, framebufferCache, (y == 0 ? headerSize : 0) + lineSize * nlines * scaleFactorY, 0));
+        TRY(IFile_Write(file, &total, framebufferCache, (y == 0 ? headerSize : 0) + lineSize * nlines * scaleFactorY, 0)); 
         timeSpentWritingScreenshot += svcGetSystemTick() - t1;
 
         y += nlines;
@@ -509,7 +509,7 @@ void RosalinaMenu_TakeScreenshot(void)
     svcFlushEntireDataCache();
 
     bool is3d;
-    u32 topWidth, bottomWidth;
+    u32 topWidth, bottomWidth; 
 
     Draw_GetCurrentScreenInfo(&bottomWidth, &is3d, false);
     Draw_GetCurrentScreenInfo(&topWidth, &is3d, true);
@@ -518,7 +518,7 @@ void RosalinaMenu_TakeScreenshot(void)
     if(R_SUCCEEDED(res))
     {
         res = FSUSER_CreateDirectory(archive, fsMakePath(PATH_ASCII, "/luma/screenshots"), 0);
-        if((u32)res == 0xC82044BE)
+        if((u32)res == 0xC82044BE) 
             res = 0;
         FSUSER_CloseArchive(archive);
     }
@@ -555,7 +555,7 @@ end:
         FSUSER_CloseArchive(archive);
 
     if (R_FAILED(Draw_AllocateFramebufferCache(FB_BOTTOM_SIZE)))
-        __builtin_trap();
+        __builtin_trap(); 
 
     svcFlushEntireDataCache();
     Draw_SetupFramebuffer();
@@ -594,10 +594,10 @@ static Result menuWriteSelfScreenshot(IFile *file)
     u32 scaleFactorY = 1;
     u32 numLinesScaled = 240 * scaleFactorY;
 
-    u32 addr = 0x0D800000;
+    u32 addr = 0x0D800000; 
     u32 tmp;
 
-    u32 size = ((54 + lineSize * numLinesScaled * scaleFactorY) + 0xFFF) >> 12 << 12;
+    u32 size = ((54 + lineSize * numLinesScaled * scaleFactorY) + 0xFFF) >> 12 << 12; 
     u8 *buffer = NULL;
 
     TRY(svcControlMemoryEx(&tmp, addr, 0, size, MEMOP_ALLOC | MEMOP_REGION_SYSTEM, MEMPERM_READWRITE, true));
@@ -606,7 +606,7 @@ static Result menuWriteSelfScreenshot(IFile *file)
     Draw_CreateBitmapHeader(buffer, width, numLinesScaled);
 
     Draw_ConvertFrameBufferLines(buffer + 54, width, 0, numLinesScaled, scaleFactorY, false, false);
-    TRY(IFile_Write(file, &total, buffer, 54 + lineSize * numLinesScaled * scaleFactorY, 0));
+    TRY(IFile_Write(file, &total, buffer, 54 + lineSize * numLinesScaled * scaleFactorY, 0)); 
 
 end:
     if (buffer)
@@ -617,7 +617,7 @@ end:
 
 void menuTakeSelfScreenshot(void)
 {
-
+    
 
     IFile file = {0};
     Result res = 0;
@@ -644,7 +644,7 @@ void menuTakeSelfScreenshot(void)
     if(R_SUCCEEDED(res))
     {
         res = FSUSER_CreateDirectory(archive, fsMakePath(PATH_ASCII, "/luma/screenshots"), 0);
-        if((u32)res == 0xC82044BE)
+        if((u32)res == 0xC82044BE) 
             res = 0;
         FSUSER_CloseArchive(archive);
     }
@@ -857,6 +857,12 @@ void AccentColor_EnsureLoaded(void)
         }
         IFile_Close(&f);
     }
+}
+
+void AccentColor_Refresh(void)
+{
+    AccentColor_EnsureLoaded();
+    if(!g_safeMode) ColorsApply();
 }
 
 static void SdmcDeleteFile(const char *path)

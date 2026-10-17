@@ -33,12 +33,13 @@
 #include "draw.h"
 #include "menus/lang.h"
 #include "fmt.h"
-#include "utils.h"
+#include "utils.h" 
 #include "minisoc.h"
 #include "ifile.h"
 #include "pmdbgext.h"
 #include "plugin.h"
 #include "process_patches.h"
+#include "menus/updater.h"
 
 typedef struct DspFirmSegmentHeader {
     u32 offset;
@@ -52,11 +53,11 @@ typedef struct DspFirmSegmentHeader {
 typedef struct DspFirm {
     u8 signature[0x100];
     char magic[4];
-    u32 totalSize;
+    u32 totalSize; 
     u16 layoutBitfield;
     u8 _0x10A[3];
     u8 surroundSegmentMemType;
-    u8 numSegments;
+    u8 numSegments; 
     u8 flags;
     u32 surroundSegmentLoadAddrHalfwords;
     u32 surroundSegmentSize;
@@ -74,6 +75,7 @@ Menu miscellaneousMenu = {
         { "Update time and date via NTP", METHOD, .method = &MiscellaneousMenu_UpdateTimeDateNtp },
         { "Nullify user time offset", METHOD, .method = &MiscellaneousMenu_NullifyUserTimeOffset },
         { "Dump DSP firmware", METHOD, .method = &MiscellaneousMenu_DumpDspFirm },
+        { "Update Luma3DS", METHOD, .method = &RosalinaMenu_Update },
         {},
     }
 };
@@ -82,7 +84,7 @@ int lastNtpTzOffset = 0;
 
 static inline bool compareTids(u64 tidA, u64 tidB)
 {
-
+    
     return ((tidA ^ tidB) & ~0xF0000000ull) == 0;
 }
 
@@ -117,13 +119,13 @@ void MiscellaneousMenu_SwitchBoot3dsxTargetTitle(void)
 
     Luma_SharedConfig->selected_hbldr_3dsx_tid = newTid;
 
-
-
-
-
-
-
-
+    
+    
+    
+    
+    
+    
+    
     if (!appRunning)
         Luma_SharedConfig->hbldr_3dsx_tid = newTid;
 
@@ -342,7 +344,7 @@ void MiscellaneousMenu_UpdateTimeDateNtp(void)
         Draw_Unlock();
 
         input = waitInput();
-        if(input & KEY_LEFT) utcOffset = (27 + utcOffset - 1) % 27;
+        if(input & KEY_LEFT) utcOffset = (27 + utcOffset - 1) % 27; 
         if(input & KEY_RIGHT) utcOffset = (utcOffset + 1) % 27;
         if(input & KEY_UP) utcOffsetMinute = (utcOffsetMinute + 1) % 60;
         if(input & KEY_DOWN) utcOffsetMinute = (60 + utcOffsetMinute - 1) % 60;
@@ -417,11 +419,11 @@ static Result MiscellaneousMenu_DumpDspFirmCallback(Handle procHandle, u32 textS
     (void)procHandle;
     Result res = 0;
 
-
+    
     u32 rwStart = 0x00100000 + textSz + roSz;
     u32 rwEnd = rwStart + rwSz;
 
-
+    
     u32 magic;
     memcpy(&magic, "DSP1", 4);
     const u32 *off = (u32 *)rwStart;
@@ -431,23 +433,23 @@ static Result MiscellaneousMenu_DumpDspFirmCallback(Handle procHandle, u32 textS
     if (off >= (u32 *)rwEnd || off < (u32 *)(rwStart + 0x100))
         return -2;
 
-
+    
     const DspFirm *firm = (const DspFirm *)((u32)off - 0x100);
     if (firm->totalSize > 0x10000 || firm->numSegments > 10)
         return -3;
     if ((u32)firm + firm->totalSize >= rwEnd)
         return -3;
 
-
+    
     IFile file;
     FS_Archive archive;
 
-
+    
     res = FSUSER_OpenArchive(&archive, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""));
     if(R_SUCCEEDED(res))
     {
         res = FSUSER_CreateDirectory(archive, fsMakePath(PATH_ASCII, "/3ds"), 0);
-        if((u32)res == 0xC82044BE)
+        if((u32)res == 0xC82044BE) 
             res = 0;
         FSUSER_CloseArchive(archive);
     }
@@ -462,7 +464,7 @@ static Result MiscellaneousMenu_DumpDspFirmCallback(Handle procHandle, u32 textS
     if(R_SUCCEEDED(res))
         res = IFile_Write(&file, &total, firm, firm->totalSize, 0);
     if(R_SUCCEEDED(res))
-        res = IFile_SetSize(&file, firm->totalSize);
+        res = IFile_SetSize(&file, firm->totalSize); 
 
     IFile_Close(&file);
 

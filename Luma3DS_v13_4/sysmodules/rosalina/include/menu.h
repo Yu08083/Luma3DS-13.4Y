@@ -35,6 +35,7 @@ extern u32 g_accentColor;
 extern u32 g_textColor;
 extern u32 g_cursorColor;
 void AccentColor_EnsureLoaded(void);
+void AccentColor_Refresh(void);
 void LogLine(const char *msg);
 void SDSpaceWarnIfLow(void);
 extern bool g_safeMode;
@@ -54,7 +55,7 @@ extern u8 g_menuWorkBuf[MENU_WORK_BUF_SIZE];
 #define CORE_APPLICATION  0
 #define CORE_SYSTEM       1
 
-#define FLOAT_CONV_MULT 1e8
+#define FLOAT_CONV_MULT 1e8 
 
 typedef enum MenuItemAction {
     MENU_END = 0,

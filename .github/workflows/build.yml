@@ -24,6 +24,12 @@ jobs:
       - run: python3 tests/ftp_listener.py
       - run: python3 tests/themes.py
       - run: python3 tests/theme_menu.py
+      - run: python3 tests/updater_format.py
+      - run: python3 tests/updater_tls.py
+      - run: python3 tests/updater_http.py
+      - run: python3 tests/updater_storage.py
+      - run: python3 tests/updater_net.py
+      - run: python3 tests/updater_worker.py
       - run: python3 tests/online_id.py
       - run: python3 tests/online_bridge.py
       - run: python3 -m pip install unicorn==2.1.4

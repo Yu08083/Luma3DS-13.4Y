@@ -43,7 +43,7 @@ static Result SOCU_Initialize(Handle memhandle, u32 memsize)
     Result ret = 0;
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0x1,1,4);
+    cmdbuf[0] = IPC_MakeHeader(0x1,1,4); 
     cmdbuf[1] = memsize;
     cmdbuf[2] = IPC_Desc_CurProcessId();
     cmdbuf[4] = IPC_Desc_SharedHandles(1);
@@ -61,7 +61,7 @@ static Result SOCU_Shutdown(void)
     Result ret = 0;
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0x19,0,0);
+    cmdbuf[0] = IPC_MakeHeader(0x19,0,0); 
 
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0)
@@ -80,7 +80,7 @@ void miniSocLockState(void)
         ndmuInit();
         res = NDMU_EnterExclusiveState(NDM_EXCLUSIVE_STATE_INFRASTRUCTURE);
         if (R_SUCCEEDED(res))
-            res = NDMU_LockState();
+            res = NDMU_LockState(); 
         exclusiveStateEntered = R_SUCCEEDED(res);
         __dmb();
     }
@@ -206,20 +206,20 @@ int socSocket(int domain, int type, int protocol)
 
     u32 *cmdbuf = getThreadCommandBuffer();
 
-
-
+    
+                                                                          
     if (domain == AF_INET
     && type == SOCK_STREAM
     && protocol == IPPROTO_TCP) {
-        protocol = 0;
+        protocol = 0; 
     }
     if (domain == AF_INET
     && type == SOCK_DGRAM
     && protocol == IPPROTO_UDP) {
-        protocol = 0;
+        protocol = 0; 
     }
 
-    cmdbuf[0] = IPC_MakeHeader(0x2,3,2);
+    cmdbuf[0] = IPC_MakeHeader(0x2,3,2); 
     cmdbuf[1] = domain;
     cmdbuf[2] = type;
     cmdbuf[3] = protocol;
@@ -228,7 +228,7 @@ int socSocket(int domain, int type, int protocol)
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0)
     {
-
+        
         return R_FAILED(ret) ? ret : -1;
     }
 
@@ -236,8 +236,8 @@ int socSocket(int domain, int type, int protocol)
     if(ret == 0) ret = cmdbuf[2];
     if(ret < 0)
     {
-
-
+        
+        
         return -1;
     }
     else
@@ -260,7 +260,7 @@ int socBind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 
     if(addrlen < tmp_addrlen)
     {
-
+        
         return -1;
     }
 
@@ -268,7 +268,7 @@ int socBind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     tmpaddr[1] = addr->sa_family;
     memcpy(&tmpaddr[2], &addr->sa_data, tmp_addrlen-2);
 
-    cmdbuf[0] = IPC_MakeHeader(0x5,2,4);
+    cmdbuf[0] = IPC_MakeHeader(0x5,2,4); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)tmp_addrlen;
     cmdbuf[3] = IPC_Desc_CurProcessId();
@@ -277,7 +277,7 @@ int socBind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0) {
-
+        
         return ret;
     }
 
@@ -286,7 +286,7 @@ int socBind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -298,7 +298,7 @@ int socListen(int sockfd, int max_connections)
     Result ret = 0;
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0x3,2,2);
+    cmdbuf[0] = IPC_MakeHeader(0x3,2,2); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)max_connections;
     cmdbuf[3] = IPC_Desc_CurProcessId();
@@ -306,7 +306,7 @@ int socListen(int sockfd, int max_connections)
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0)
     {
-
+        
         return ret;
     }
 
@@ -315,7 +315,7 @@ int socListen(int sockfd, int max_connections)
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -333,7 +333,7 @@ int socAccept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 
     memset(tmpaddr, 0, 0x1c);
 
-    cmdbuf[0] = IPC_MakeHeader(0x4,2,2);
+    cmdbuf[0] = IPC_MakeHeader(0x4,2,2); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)tmp_addrlen;
     cmdbuf[3] = IPC_Desc_CurProcessId();
@@ -357,8 +357,8 @@ int socAccept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
     if(ret == 0)
         ret = _net_convert_error(cmdbuf[2]);
 
-
-
+    
+        
 
     if(ret >= 0 && addr != NULL)
     {
@@ -395,7 +395,7 @@ int socConnect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     tmpaddr[1] = addr->sa_family;
     memcpy(&tmpaddr[2], &addr->sa_data, tmp_addrlen-2);
 
-    cmdbuf[0] = IPC_MakeHeader(0x6,2,4);
+    cmdbuf[0] = IPC_MakeHeader(0x6,2,4); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)addrlen;
     cmdbuf[3] = IPC_Desc_CurProcessId();
@@ -431,7 +431,7 @@ int socPoll(struct pollfd *fds, nfds_t nfds, int timeout)
         fds[i].revents = 0;
     }
 
-    cmdbuf[0] = IPC_MakeHeader(0x14,2,4);
+    cmdbuf[0] = IPC_MakeHeader(0x14,2,4); 
     cmdbuf[1] = (u32)nfds;
     cmdbuf[2] = (u32)timeout;
     cmdbuf[3] = IPC_Desc_CurProcessId();
@@ -466,13 +466,13 @@ int socClose(int sockfd)
     int ret = 0;
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0xB,1,2);
+    cmdbuf[0] = IPC_MakeHeader(0xB,1,2); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = IPC_Desc_CurProcessId();
 
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0) {
-
+        
         return ret;
     }
 
@@ -481,7 +481,7 @@ int socClose(int sockfd)
         ret =_net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -493,7 +493,7 @@ int socSetsockopt(int sockfd, int level, int optname, const void *optval, sockle
     int ret = 0;
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0x12,4,4);
+    cmdbuf[0] = IPC_MakeHeader(0x12,4,4); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)level;
     cmdbuf[3] = (u32)optname;
@@ -512,7 +512,7 @@ int socSetsockopt(int sockfd, int level, int optname, const void *optval, sockle
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -524,11 +524,11 @@ long socGethostid(void)
     int ret = 0;
     u32 *cmdbuf = getThreadCommandBuffer();
 
-    cmdbuf[0] = IPC_MakeHeader(0x16,0,0);
+    cmdbuf[0] = IPC_MakeHeader(0x16,0,0); 
 
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0) {
-
+        
         return -1;
     }
 
@@ -552,7 +552,7 @@ static ssize_t _socuipc_cmd7(int sockfd, void *buf, size_t len, int flags, struc
     if(src_addr)
         tmp_addrlen = 0x1c;
 
-    cmdbuf[0] = IPC_MakeHeader(0x7,4,4);
+    cmdbuf[0] = IPC_MakeHeader(0x7,4,4); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)len;
     cmdbuf[3] = (u32)flags;
@@ -574,7 +574,7 @@ static ssize_t _socuipc_cmd7(int sockfd, void *buf, size_t len, int flags, struc
     staticbufs[1] = saved_threadstorage[1];
 
     if(ret != 0) {
-
+        
         return -1;
     }
 
@@ -583,7 +583,7 @@ static ssize_t _socuipc_cmd7(int sockfd, void *buf, size_t len, int flags, struc
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -640,7 +640,7 @@ static ssize_t _socuipc_cmd8(int sockfd, void *buf, size_t len, int flags, struc
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -670,7 +670,7 @@ static ssize_t _socuipc_cmd9(int sockfd, const void *buf, size_t len, int flags,
             tmp_addrlen = 0x1c;
 
         if(addrlen < tmp_addrlen) {
-
+            
             return -1;
         }
 
@@ -679,7 +679,7 @@ static ssize_t _socuipc_cmd9(int sockfd, const void *buf, size_t len, int flags,
         memcpy(&tmpaddr[2], &dest_addr->sa_data, tmp_addrlen-2);
     }
 
-    cmdbuf[0] = IPC_MakeHeader(0x9,4,6);
+    cmdbuf[0] = IPC_MakeHeader(0x9,4,6); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)len;
     cmdbuf[3] = (u32)flags;
@@ -692,7 +692,7 @@ static ssize_t _socuipc_cmd9(int sockfd, const void *buf, size_t len, int flags,
 
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0) {
-
+        
         return ret;
     }
 
@@ -701,7 +701,7 @@ static ssize_t _socuipc_cmd9(int sockfd, const void *buf, size_t len, int flags,
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -724,7 +724,7 @@ static ssize_t _socuipc_cmda(int sockfd, const void *buf, size_t len, int flags,
             tmp_addrlen = 0x1c;
 
         if(addrlen < tmp_addrlen) {
-
+            
             return -1;
         }
 
@@ -733,7 +733,7 @@ static ssize_t _socuipc_cmda(int sockfd, const void *buf, size_t len, int flags,
         memcpy(&tmpaddr[2], &dest_addr->sa_data, tmp_addrlen-2);
     }
 
-    cmdbuf[0] = IPC_MakeHeader(0xA,4,6);
+    cmdbuf[0] = IPC_MakeHeader(0xA,4,6); 
     cmdbuf[1] = (u32)sockfd;
     cmdbuf[2] = (u32)len;
     cmdbuf[3] = (u32)flags;
@@ -746,7 +746,7 @@ static ssize_t _socuipc_cmda(int sockfd, const void *buf, size_t len, int flags,
 
     ret = svcSendSyncRequest(miniSocHandle);
     if(ret != 0) {
-
+        
         return ret;
     }
 
@@ -755,7 +755,7 @@ static ssize_t _socuipc_cmda(int sockfd, const void *buf, size_t len, int flags,
         ret = _net_convert_error(cmdbuf[2]);
 
     if(ret < 0) {
-
+        
         return -1;
     }
 
@@ -774,4 +774,81 @@ ssize_t socSendto(int sockfd, const void *buf, size_t len, int flags, const stru
     if(len < 0x2000)
         return _socuipc_cmda(sockfd, buf, len, flags, dest_addr, addrlen);
     return _socuipc_cmd9(sockfd, buf, len, flags, dest_addr, addrlen);
+}
+
+int socResolveIPv4(const char *hostname,u32 addresses[4])
+{
+    static u8 output[0x1A88];
+    if(!miniSocEnabled || !hostname || !addresses) return -ENETDOWN;
+    u32 length=0;
+    while(hostname[length])
+    {
+        u8 c=(u8)hostname[length];
+        if(length>=253 || !((c>='a' && c<='z') || (c>='A' && c<='Z') ||
+           (c>='0' && c<='9') || c=='.' || c=='-')) return -EINVAL;
+        length++;
+    }
+    if(!length) return -EINVAL;
+    memset(output,0,sizeof(output));
+    u32 *cmdbuf=getThreadCommandBuffer();
+    u32 *slots=getThreadStaticBuffers();
+    u32 saved[2]={slots[0],slots[1]};
+    cmdbuf[0]=IPC_MakeHeader(0xD,2,2);
+    cmdbuf[1]=length+1;
+    cmdbuf[2]=sizeof(output);
+    cmdbuf[3]=IPC_Desc_StaticBuffer(length+1,3);
+    cmdbuf[4]=(u32)hostname;
+    slots[0]=IPC_Desc_StaticBuffer(sizeof(output),0);
+    slots[1]=(u32)output;
+    Result result=svcSendSyncRequest(miniSocHandle);
+    slots[0]=saved[0];
+    slots[1]=saved[1];
+    if(result!=0 || cmdbuf[1]) return -SYNC_ERROR;
+    int status=_net_convert_error(cmdbuf[2]);
+    if(status<0) return status;
+    u32 count;
+    memcpy(&count,output+4,4);
+    if(!count || count>16) return -ENOENT;
+    unsigned int used=0;
+    for(u32 i=0;i<count && used<4;i++)
+    {
+        u32 address;
+        memcpy(&address,output+0x1908+i*0x10,4);
+        if(!address || address==0xFFFFFFFF) continue;
+        bool duplicate=false;
+        for(unsigned int k=0;k<used;k++) if(addresses[k]==address) duplicate=true;
+        if(!duplicate) addresses[used++]=address;
+    }
+    return used ? (int)used : -ENOENT;
+}
+
+int socSetNonBlocking(int sockfd)
+{
+    if(!miniSocEnabled || sockfd<0) return -EINVAL;
+    u32 *cmdbuf=getThreadCommandBuffer();
+    cmdbuf[0]=IPC_MakeHeader(0x13,3,2);
+    cmdbuf[1]=(u32)sockfd;
+    cmdbuf[2]=4;
+    cmdbuf[3]=4;
+    cmdbuf[4]=IPC_Desc_CurProcessId();
+    Result result=svcSendSyncRequest(miniSocHandle);
+    if(result!=0 || cmdbuf[1]) return -SYNC_ERROR;
+    return _net_convert_error(cmdbuf[2]);
+}
+
+int socConnectAsync(int sockfd,const struct sockaddr *addr,socklen_t addrlen)
+{
+    if(!miniSocEnabled || sockfd<0 || !addr || addr->sa_family!=AF_INET || addrlen!=sizeof(struct sockaddr_in)) return -EINVAL;
+    u8 target[8]={8,AF_INET};
+    memcpy(target+2,addr->sa_data,6);
+    u32 *cmdbuf=getThreadCommandBuffer();
+    cmdbuf[0]=IPC_MakeHeader(0x6,2,4);
+    cmdbuf[1]=(u32)sockfd;
+    cmdbuf[2]=addrlen;
+    cmdbuf[3]=IPC_Desc_CurProcessId();
+    cmdbuf[5]=IPC_Desc_StaticBuffer(sizeof(target),0);
+    cmdbuf[6]=(u32)target;
+    Result result=svcSendSyncRequest(miniSocHandle);
+    if(result!=0 || cmdbuf[1]) return -SYNC_ERROR;
+    return _net_convert_error(cmdbuf[2]);
 }

@@ -76,6 +76,8 @@ static u32 held, opens, decodes, clears, rows, allocated, freed, keyIndex, keyCo
 static u32 keys[32];
 static u16 g_menuBgColor;
 static u32 g_accentColor, g_textColor, g_cursorColor;
+static u32 colorRefreshes;
+void AccentColor_Refresh(void) { ++colorRefreshes; }
 static u64 memoryA[0x36000 / 8], memoryB[0x36000 / 8];
 static const char *directoryNames[] = {"z.png", "not.txt", "a.JPG", "日本語.bmp"};
 static u32 directoryOffset;
@@ -219,8 +221,16 @@ int main(void)
     assert(!Theme_Disable() && themePixels == (u16 *)memoryB);
     failWrite = false;
     const u32 off[] = { KEY_X };
+    g_accentColor = 0xA11C; g_textColor = 0xB22D; g_cursorColor = 0xC33E; g_menuBgColor = 0x1234;
+    u32 previousRefreshes = colorRefreshes;
     choose(off, 1);
     assert(themePixels == NULL && config[0] == 0 && themeSelected[0] == 0);
+    assert(g_accentColor == 0xA11C && g_textColor == 0xB22D && g_cursorColor == 0xC33E && g_menuBgColor == 0x1234);
+#if NEWER
+    assert(colorRefreshes == previousRefreshes + 1);
+#else
+    (void)previousRefreshes;
+#endif
     assert(allocated >= 3 && freed >= allocated);
     puts("Theme UTF-8 file listing/sorting, selection, cached loading, safe mode, failed loads/saves, incremental rows and disable: OK");
     return 0;
@@ -233,7 +243,7 @@ for version in ('Luma3DS_v13_4',):
     code = code.replace('#define THEME_ADDRESS_A 0x0D100000u', '#define THEME_ADDRESS_A ((uintptr_t)memoryA)').replace('#define THEME_ADDRESS_B 0x0D180000u', '#define THEME_ADDRESS_B ((uintptr_t)memoryB)')
     code = code.replace('(u32)themePixels', '(uintptr_t)themePixels').replace('(u32)pixels', '(uintptr_t)pixels').replace('u32 address =', 'uintptr_t address =')
     target = generated / (version + '_theme_menu.c')
-    target.write_text(prefix + code + main, encoding='utf-8', newline='\n')
+    target.write_text('#define NEWER ' + str(int(version == 'Luma3DS_v13_4')) + '\n' + prefix + code + main, encoding='utf-8', newline='\n')
     exe = target.with_suffix('.exe' if os.name == 'nt' else '')
     subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-variable', '-O2', '-I' + str(base / 'include'), str(target), str(base / 'source/text.c'), '-o', str(exe)], check=True, env=env)
     subprocess.run([str(exe)], check=True, env=env)

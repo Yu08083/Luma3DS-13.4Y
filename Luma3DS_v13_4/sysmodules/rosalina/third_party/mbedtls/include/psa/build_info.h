@@ -1,0 +1,20 @@
+   
+                         
+  
+                                           
+  
+                                                  
+                                                                            
+                                            
+   
+/*
+ *  Copyright The Mbed TLS Contributors
+ *  SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later
+ */
+
+#ifndef PSA_CRYPTO_BUILD_INFO_H
+#define PSA_CRYPTO_BUILD_INFO_H
+
+#include "mbedtls/build_info.h"
+
+#endif                              

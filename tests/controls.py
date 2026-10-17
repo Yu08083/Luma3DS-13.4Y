@@ -186,6 +186,13 @@ int main(void)
     AccentColor_EnsureLoaded();
     assert(g_cursorColor != g_accentColor && g_colH[2] == 180);
 #if NEWER
+    g_textColor = 0xFFFF;
+    AccentColor_Refresh();
+    assert(g_textColor == AccentHsv(60, 200, 150));
+    assert(g_accentColor == AccentHsv(300, 128, 200));
+    assert(g_menuBgColor == AccentHsv(90, 150, 100));
+#endif
+#if NEWER
     const u32 colorCancel[] = { KEY_X, KEY_B };
     memcpy(keyList, colorCancel, sizeof(colorCancel));
     keyCount = 2; keyIndex = UINT32_MAX;

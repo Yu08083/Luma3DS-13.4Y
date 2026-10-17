@@ -1,6 +1,6 @@
-
+                                                                                  
 .SUFFIXES:
-
+                                                                                  
 
 ifeq ($(strip $(DEVKITARM)),)
 $(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM")
@@ -9,44 +9,45 @@ endif
 TOPDIR ?= $(CURDIR)
 include $(DEVKITARM)/3ds_rules
 
-
+                                                                            
 export HBLDR_DEFAULT_3DSX_TID ?= 000400000D921E00
 
-
+                                                                                                           
 export HBLDR_DEFAULT_3DSX_TITLE_NAME ?= "hblauncher_loader"
 
-
-
-
-
-
-
-
+                                                                                  
+                                  
+                                                                               
+                                                         
+                                                     
+                                                           
+                                                                                  
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source/gdb source/menus source/plugin source/redshift
+SOURCES		:=	source source/gdb source/menus source/plugin source/redshift third_party/mbedtls/library
 DATA		:=	source/gdb/xml data
-INCLUDES	:=	include include/gdb include/menus include/redshift
+INCLUDES	:=	include include/gdb include/menus include/redshift third_party/mbedtls/include
 
-
-
-
+                                                                                  
+                             
+                                                                                  
 ARCH	:=	-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
-DEFINES :=	-D__3DS__ -DHBLDR_DEFAULT_3DSX_TID="0x$(HBLDR_DEFAULT_3DSX_TID)ULL" -DHBLDR_DEFAULT_3DSX_TITLE_NAME="\"$(HBLDR_DEFAULT_3DSX_TITLE_NAME)\""
+DEFINES := -DMBEDTLS_CONFIG_FILE=\"updater_tls_config.h\"
+DEFINES +=	-D__3DS__ -DHBLDR_DEFAULT_3DSX_TID="0x$(HBLDR_DEFAULT_3DSX_TID)ULL" -DHBLDR_DEFAULT_3DSX_TITLE_NAME="\"$(HBLDR_DEFAULT_3DSX_TITLE_NAME)\""
 
 FALSEPOSITIVES := -Wno-array-bounds -Wno-stringop-overflow -Wno-stringop-overread
-
-
-
-
-
-
-
-
-
-
-
-
+                                                              
+                                        
+                                           
+ 
+                             
+                                                                       
+                                              
+ 
+                                      
+                                                 
+                                              
+                                                
 HARDERRORS := -Werror=implicit-function-declaration -Werror=implicit-int \
               -Werror=return-type \
               -Wno-error=int-conversion -Wno-error=incompatible-pointer-types
@@ -55,7 +56,7 @@ ifeq ($(strip $(STRICT)),1)
 else
     WERROR :=
 endif
-
+                                                                             
 
 CFLAGS	:=	-g -std=gnu11 -Wall -Wextra $(WERROR) $(HARDERRORS) -Wno-unused-value -Os -mword-relocations \
 			-fomit-frame-pointer -ffunction-sections -fdata-sections -fno-math-errno \
@@ -70,19 +71,19 @@ LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map),-wrap,exit,--se
 
 LIBS	:=	-lctru -lm
 
-
-
-
-
+                                                                                  
+                                                                                 
+                 
+                                                                                  
 LIBDIRS	:=	$(CTRULIB)
 
 
-
-
-
-
+                                                                                  
+                                                                                 
+                                     
+                                                                                  
 ifneq ($(BUILD),$(notdir $(CURDIR)))
-
+                                                                                  
 
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 export TOPDIR	:=	$(CURDIR)
@@ -97,19 +98,19 @@ CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
 
-
-
-
+                                                                                  
+                                                     
+                                                                                  
 ifeq ($(strip $(CPPFILES)),)
-
+                                                                                  
 	export LD	:=	$(CC)
-
+                                                                                  
 else
-
+                                                                                  
 	export LD	:=	$(CXX)
-
+                                                                                  
 endif
-
+                                                                                  
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES))
 export OFILES_SRC	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
@@ -124,28 +125,28 @@ export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
 .PHONY: $(BUILD) clean all
 
-
+                                                                                  
 all: $(BUILD)
 
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
-
+                                                                                  
 clean:
 	@echo clean ...
 	@rm -fr $(BUILD) $(TARGET).cxi $(TARGET).elf
 
 
-
+                                                                                  
 else
 .PHONY:	all
 
 DEPENDS	:=	$(OFILES:.o=.d)
 
-
-
-
+                                                                                  
+              
+                                                                                  
 all	:	$(OUTPUT).cxi
 
 $(OUTPUT).cxi	:	$(OUTPUT).elf $(OUTPUT).rsf
@@ -163,25 +164,26 @@ draw.o: CFLAGS += -O3
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
-
-
-
+                                                                                  
+                                                                     
+                                                                                  
 %.bin.o	%_bin.h:	%.bin
-
+                                                                                  
 	@echo $(notdir $<)
 	@$(bin2o)
-
+                                                                                  
 %.xml.o	%_xml.h:	%.xml
-
+                                                                                  
 	@echo $(notdir $<)
 	@$(bin2o)
-
+                                                                                  
 %.ini.o	%_ini.h:	%.ini
-
+                                                                                  
 	@echo $(notdir $<)
 	@$(bin2o)
 
 -include $(DEPENDS)
 
-
+                                                                                        
 endif
+                                                                                        

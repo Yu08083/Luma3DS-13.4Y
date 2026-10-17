@@ -1,0 +1,878 @@
+{
+  "repository": "https://github.com/Mbed-TLS/mbedtls",
+  "tag": "mbedtls-3.6.7",
+  "commit": "068ff080b369adfac81509f9b57b2afabaf82dc5",
+  "license": "Apache-2.0 OR GPL-2.0-or-later",
+  "source_files": [
+    {
+      "original": "library/aes.c",
+      "path": "library/mbedtls_aes.c",
+      "sha256": "f6a802a8a790aa3e81f9434f222d5ca04baa1f78c0d1c26a0a0210f08c5b1d68"
+    },
+    {
+      "original": "library/aesce.c",
+      "path": "library/mbedtls_aesce.c",
+      "sha256": "d53d5d80306cd476904cc640aa27e77b4376bd3ea1fe61edbf021f767a22fc56"
+    },
+    {
+      "original": "library/aesce.h",
+      "path": "library/aesce.h",
+      "sha256": "0e8613bf608c9b70ae6f14be966f6c93083013e9753115214ae8cb982101a862"
+    },
+    {
+      "original": "library/aesni.c",
+      "path": "library/mbedtls_aesni.c",
+      "sha256": "1772d3d17d9c5e37713e56d6f0fd507f429dd60a594056ad8c47cbdddb1322d5"
+    },
+    {
+      "original": "library/aesni.h",
+      "path": "library/aesni.h",
+      "sha256": "df4418b2c2d0ebd27a2e1b7a0d07d264d8f4dd38852349a86b9e3e0c3b28b552"
+    },
+    {
+      "original": "library/alignment.h",
+      "path": "library/alignment.h",
+      "sha256": "951b2db4e2981aa0fd1387feca09a0ae5e336f28e4761bc42161fb9a101b9dfa"
+    },
+    {
+      "original": "library/aria.c",
+      "path": "library/mbedtls_aria.c",
+      "sha256": "9fd8e3617370512c351ea3b6e96b3340e3b27dc9b1381714f77fc5c52a09a4f1"
+    },
+    {
+      "original": "library/asn1parse.c",
+      "path": "library/mbedtls_asn1parse.c",
+      "sha256": "63c99ef124c62040fee54b2981be4a0d5da9737dc1d3ce2cd0f7199acf830c2b"
+    },
+    {
+      "original": "library/asn1write.c",
+      "path": "library/mbedtls_asn1write.c",
+      "sha256": "ca38ff74a6da768163b8933fd056cc17829221b57f4327e5c1e99abf7dc7bd58"
+    },
+    {
+      "original": "library/base64.c",
+      "path": "library/mbedtls_base64.c",
+      "sha256": "257bd2c51fb098f784ff949149ca88dd8d44cfbafa9ee2b26c5b25bdad162869"
+    },
+    {
+      "original": "library/base64_internal.h",
+      "path": "library/base64_internal.h",
+      "sha256": "664436938611a38d5df1f22a0a875e283c98c08c68ececb7fb6b11843e826b53"
+    },
+    {
+      "original": "library/bignum.c",
+      "path": "library/mbedtls_bignum.c",
+      "sha256": "c711fd6f526d64ed4fd6a73688d916ec1715b20ad632ea51619271f6ce70f0af"
+    },
+    {
+      "original": "library/bignum_core.c",
+      "path": "library/mbedtls_bignum_core.c",
+      "sha256": "01e359ef7696abd41989cb10d803f2b2feb9003729cc5b7d7cfcbdee97ec5e48"
+    },
+    {
+      "original": "library/bignum_core.h",
+      "path": "library/bignum_core.h",
+      "sha256": "15228f040a0af9130f6ce2162ce9cf2fd869d12fd1586c991a997c472dab2c67"
+    },
+    {
+      "original": "library/bignum_core_invasive.h",
+      "path": "library/bignum_core_invasive.h",
+      "sha256": "a293767e293fdb404dc0d5b2c33ec347fc78229d366a06a0e48bd084bbd2a722"
+    },
+    {
+      "original": "library/bignum_internal.h",
+      "path": "library/bignum_internal.h",
+      "sha256": "008ad1995c35440279155403c6872ac875e3dcd4711fd22380e584ec9a53ea7e"
+    },
+    {
+      "original": "library/bignum_mod.c",
+      "path": "library/mbedtls_bignum_mod.c",
+      "sha256": "7c5ff8a7be1fd1591e5a3e1f22f2f4a89bb6d0344722902886f68bc02aafd616"
+    },
+    {
+      "original": "library/bignum_mod.h",
+      "path": "library/bignum_mod.h",
+      "sha256": "0198b5176c66cfd4776ddb83fede9d426249eb9b0ec094c182af4fe72517953f"
+    },
+    {
+      "original": "library/bignum_mod_raw.c",
+      "path": "library/mbedtls_bignum_mod_raw.c",
+      "sha256": "0e50190c0b2f543f25167e409aa74759e6bc550fe163c0496fabae16a7d18930"
+    },
+    {
+      "original": "library/bignum_mod_raw.h",
+      "path": "library/bignum_mod_raw.h",
+      "sha256": "5ed994ab6d5c07d6c09ab830ccea09e0c66c0c81d635496ed09042cce456f6b5"
+    },
+    {
+      "original": "library/bignum_mod_raw_invasive.h",
+      "path": "library/bignum_mod_raw_invasive.h",
+      "sha256": "4ec1c708bf748eb6c633465937699f70231215a217322b2a96fc49f42b12d068"
+    },
+    {
+      "original": "library/block_cipher.c",
+      "path": "library/mbedtls_block_cipher.c",
+      "sha256": "602378076b660b6b58cd751b32a99bbd6dcfbb750f48de72449d73680f54a2ce"
+    },
+    {
+      "original": "library/block_cipher_internal.h",
+      "path": "library/block_cipher_internal.h",
+      "sha256": "02b9d688400c2fbdbdb016713745530efb8e7ecfc8e99a7c7cfe5b90b02510c9"
+    },
+    {
+      "original": "library/bn_mul.h",
+      "path": "library/bn_mul.h",
+      "sha256": "bca050d8794991669845fc62de58b40e622ac0383f27f6b470026d628dd184a6"
+    },
+    {
+      "original": "library/camellia.c",
+      "path": "library/mbedtls_camellia.c",
+      "sha256": "c7e826ca5f409eb320c698ef8644ef5acf4c0b38e74d33ac07b6cd90f43d544c"
+    },
+    {
+      "original": "library/ccm.c",
+      "path": "library/mbedtls_ccm.c",
+      "sha256": "3b298a3e2a8b5abb1dd3be99ae56e910de5f1fd903ec091825b498abe8c3fe4f"
+    },
+    {
+      "original": "library/chacha20.c",
+      "path": "library/mbedtls_chacha20.c",
+      "sha256": "d86d5616a9c20bee7eec55e3ce3c470b11984e31e29e0cf301f94d254a51b1d4"
+    },
+    {
+      "original": "library/chacha20_internal.h",
+      "path": "library/chacha20_internal.h",
+      "sha256": "b1e0489c0c438d3fbbdb908e8a803fd2891b3736e38d4d74aaea1e2a9adead40"
+    },
+    {
+      "original": "library/chachapoly.c",
+      "path": "library/mbedtls_chachapoly.c",
+      "sha256": "4ca82f3440be72acc517bcb4647e0e54620c8c2b14a8583a5a216f43ce5db285"
+    },
+    {
+      "original": "library/check_crypto_config.h",
+      "path": "library/check_crypto_config.h",
+      "sha256": "68dc12e98959a592d4942ff8bc6f0d2d421d377f2b6c710314508b15ca6a7e41"
+    },
+    {
+      "original": "library/cipher.c",
+      "path": "library/mbedtls_cipher.c",
+      "sha256": "8fc7e4c3b5e6b2273e5614d4af5288f06538c6fae096bb4ec07d420531722bd6"
+    },
+    {
+      "original": "library/cipher_invasive.h",
+      "path": "library/cipher_invasive.h",
+      "sha256": "ee6fafc885a6820aaf909329da5b9ad3fb391d41abbb83cee7daf894f2de374b"
+    },
+    {
+      "original": "library/cipher_wrap.c",
+      "path": "library/mbedtls_cipher_wrap.c",
+      "sha256": "7be3076ebebe105043b312069d35903480be7e09d7f2c5d30b256b7a05727344"
+    },
+    {
+      "original": "library/cipher_wrap.h",
+      "path": "library/cipher_wrap.h",
+      "sha256": "818761ea793a568418317fe9236a67249d9d80062536eb3bc1b81c13df4cb9da"
+    },
+    {
+      "original": "library/cmac.c",
+      "path": "library/mbedtls_cmac.c",
+      "sha256": "b4bfc6cc73cfbcee41cad3190dc769821c4d3f830f4972525177df6564b42b56"
+    },
+    {
+      "original": "library/common.h",
+      "path": "library/common.h",
+      "sha256": "ca8e24a359193477e8282a18553bc9718057f7c1781670f8822e9b9a34d9d86d"
+    },
+    {
+      "original": "library/constant_time.c",
+      "path": "library/mbedtls_constant_time.c",
+      "sha256": "b9160df0cc9a7988663bc495001c6f7b489c6018403036ddb40272bf905fe161"
+    },
+    {
+      "original": "library/constant_time_impl.h",
+      "path": "library/constant_time_impl.h",
+      "sha256": "9c6a54de900dca4bb2c986c179c10e710aa75af680e781ff03dd2f23c6f3e700"
+    },
+    {
+      "original": "library/constant_time_internal.h",
+      "path": "library/constant_time_internal.h",
+      "sha256": "40324e49996a7e4808f42b2a8d398e8cd77fab3ac076ca9f4c43e108bc80572f"
+    },
+    {
+      "original": "library/ctr.h",
+      "path": "library/ctr.h",
+      "sha256": "a3f8d1b53f65d5dfb4d74ba17f7e758921f9dd823499ff3c113aaffde2598fa0"
+    },
+    {
+      "original": "library/ctr_drbg.c",
+      "path": "library/mbedtls_ctr_drbg.c",
+      "sha256": "c495c824a8ef7d07c7a39c7487b77e9eec0a9632133587e621a7da450036a6ef"
+    },
+    {
+      "original": "library/debug.c",
+      "path": "library/mbedtls_debug.c",
+      "sha256": "837f88ef9117f6bd08a2e75399baf159d185b9e9475491eef89a325dcac8107c"
+    },
+    {
+      "original": "library/debug_internal.h",
+      "path": "library/debug_internal.h",
+      "sha256": "3146b241c1ed20491072ada8ae4d6a714a18a820e9d213d6376cb6ee33352a9a"
+    },
+    {
+      "original": "library/des.c",
+      "path": "library/mbedtls_des.c",
+      "sha256": "7ce59dbc5d11f816da1599058c92ba108bac6ea3a0330d5bbe206e172e188cb3"
+    },
+    {
+      "original": "library/dhm.c",
+      "path": "library/mbedtls_dhm.c",
+      "sha256": "991ed6a700db42ca5fde22635a51de1d904ef3054bebf99bdb77e769b63314f3"
+    },
+    {
+      "original": "library/ecdh.c",
+      "path": "library/mbedtls_ecdh.c",
+      "sha256": "dc5eeb18171800d739348dddb9a86d0e161de6af378deeab80dcd24dff862b9f"
+    },
+    {
+      "original": "library/ecdsa.c",
+      "path": "library/mbedtls_ecdsa.c",
+      "sha256": "a1e453e22924830f67877c29302a2c5ce220fe9a5c112ab00bf91e55afd55a19"
+    },
+    {
+      "original": "library/ecjpake.c",
+      "path": "library/mbedtls_ecjpake.c",
+      "sha256": "74b22b8cdc2e059c5f4d0379529aaeaa8ebc3d908454c987c740c8858fb2cec9"
+    },
+    {
+      "original": "library/ecp.c",
+      "path": "library/mbedtls_ecp.c",
+      "sha256": "f6e4fd16be239608c569f8e549116fe8ca4b016c697c25898ea4eb1877d2f66b"
+    },
+    {
+      "original": "library/ecp_curves.c",
+      "path": "library/mbedtls_ecp_curves.c",
+      "sha256": "89ea4e1710b2b3587e87a9339be2e10158ebd2a3e36da4f0215c4fa51e4b0c16"
+    },
+    {
+      "original": "library/ecp_curves_new.c",
+      "path": "library/mbedtls_ecp_curves_new.c",
+      "sha256": "fe69f4da60701405498f89bc0e4392767a3d73f8981b54ac92efd35b5d73f8c0"
+    },
+    {
+      "original": "library/ecp_internal_alt.h",
+      "path": "library/ecp_internal_alt.h",
+      "sha256": "5217f65748bd9fed29d53a2f898ccb3cd092697766fa411a95cf67de71a7f84a"
+    },
+    {
+      "original": "library/ecp_invasive.h",
+      "path": "library/ecp_invasive.h",
+      "sha256": "04da5ba088a29f344c94d1478880dbe04867d62eeacb0bf16e1f588d03e223f2"
+    },
+    {
+      "original": "library/entropy.c",
+      "path": "library/mbedtls_entropy.c",
+      "sha256": "92fb764a5f5a2aea679c6407a710b88938286c7077b6255dd3a542247d3f1f9e"
+    },
+    {
+      "original": "library/entropy_poll.c",
+      "path": "library/mbedtls_entropy_poll.c",
+      "sha256": "7f09edae509124be1a8ce6e644f26d1b600f9fbc8678e5b3a013a8c59a315a06"
+    },
+    {
+      "original": "library/entropy_poll.h",
+      "path": "library/entropy_poll.h",
+      "sha256": "623f8d4d73fb22a66185bb32527e54fbc0c7fd7443a6156790c170c75d4e6066"
+    },
+    {
+      "original": "library/error.c",
+      "path": "library/mbedtls_error.c",
+      "sha256": "be1de564b43ccfa4540e670ddc871d9a587e3a5e3cae27130035aeaf7d906bae"
+    },
+    {
+      "original": "library/gcm.c",
+      "path": "library/mbedtls_gcm.c",
+      "sha256": "d24c6b14dcb11d0a6e6541619f5d0bc337412fd91f0700c552d2cfd0313545ea"
+    },
+    {
+      "original": "library/hkdf.c",
+      "path": "library/mbedtls_hkdf.c",
+      "sha256": "038fc53e5d7076aadb8e2384a567ee272e7a8a9d5361c6d229d6fe2ac49ccf02"
+    },
+    {
+      "original": "library/hmac_drbg.c",
+      "path": "library/mbedtls_hmac_drbg.c",
+      "sha256": "4f916398f8c055c27c93db6be556166735d1bc5b2ffef2131738cfb95d2c90a3"
+    },
+    {
+      "original": "library/lmots.c",
+      "path": "library/mbedtls_lmots.c",
+      "sha256": "f15687a53f4dca310c4261cae64f3186682fba451f5714c1a36908a27ff8cf1e"
+    },
+    {
+      "original": "library/lmots.h",
+      "path": "library/lmots.h",
+      "sha256": "7eed85c193f40c9d206a52bcf87e83a7fd7cdfa0d5271cce758ce6143d3fb42f"
+    },
+    {
+      "original": "library/lms.c",
+      "path": "library/mbedtls_lms.c",
+      "sha256": "8bf719a4370150b1fc5635645a8e75015ffc196868f70868cd1cd910fe6f97a0"
+    },
+    {
+      "original": "library/md.c",
+      "path": "library/mbedtls_md.c",
+      "sha256": "5aa7db8f18a3ef19187b5d52ec964ae7e59f15c38d7065c25880b89846b15a7d"
+    },
+    {
+      "original": "library/md5.c",
+      "path": "library/mbedtls_md5.c",
+      "sha256": "52dc6bb84dddf7281b1b3b8d9836953e8f2c4c737ef65ffc29c8bf136b9f0193"
+    },
+    {
+      "original": "library/md_psa.h",
+      "path": "library/md_psa.h",
+      "sha256": "12576902ad77afd47269e6ce6727ea157162f275b3df031ccd47cab6cc3484b1"
+    },
+    {
+      "original": "library/md_wrap.h",
+      "path": "library/md_wrap.h",
+      "sha256": "f9973aa15608ffd2df38bc197f147696ed8798b135124d3dfff80cfcb10bb361"
+    },
+    {
+      "original": "library/memory_buffer_alloc.c",
+      "path": "library/mbedtls_memory_buffer_alloc.c",
+      "sha256": "9891e658caf66ff7e786166ba92a749ea0910eb6064e3a3af987d10d42216441"
+    },
+    {
+      "original": "library/mps_common.h",
+      "path": "library/mps_common.h",
+      "sha256": "9ca015c0dc5a5820987b8d97eba4e0f9124c525975b2e5ed2f9c96c145ce05d9"
+    },
+    {
+      "original": "library/mps_error.h",
+      "path": "library/mps_error.h",
+      "sha256": "9de7971ca3a5820452870050811e9d51de898d935682b7ec874e29775daf531f"
+    },
+    {
+      "original": "library/mps_reader.c",
+      "path": "library/mbedtls_mps_reader.c",
+      "sha256": "60a3f13fd89723bbfd7712aa7f5c8ef46d35414279d70b74a549676af034dab5"
+    },
+    {
+      "original": "library/mps_reader.h",
+      "path": "library/mps_reader.h",
+      "sha256": "a3a9825e50f3aae1697854f9933401a62ba446622d7cbdfc845a553b7d1a305e"
+    },
+    {
+      "original": "library/mps_trace.c",
+      "path": "library/mbedtls_mps_trace.c",
+      "sha256": "4c887ca133621894e1ff81043c1b739a4c19bd42c96981604b78ce0dd642dd99"
+    },
+    {
+      "original": "library/mps_trace.h",
+      "path": "library/mps_trace.h",
+      "sha256": "293507798590360942eb12b3f1dce5270abf9e6c3bb1c5f9bdec2266b30b0d92"
+    },
+    {
+      "original": "library/net_sockets.c",
+      "path": "library/mbedtls_net_sockets.c",
+      "sha256": "8872ccb930703e37b4fd8f14c6d9dff7a099aa241d6bd94d0980a720da621bc7"
+    },
+    {
+      "original": "library/nist_kw.c",
+      "path": "library/mbedtls_nist_kw.c",
+      "sha256": "c1f234b351fcb64e86cbe7cccd87a9dc9b2bd1264f7e041b0601b6ca80cede08"
+    },
+    {
+      "original": "library/oid.c",
+      "path": "library/mbedtls_oid.c",
+      "sha256": "81db4203da41215e861dbe05b906e198fb87f1321278dfa8b667257b8d394660"
+    },
+    {
+      "original": "library/padlock.c",
+      "path": "library/mbedtls_padlock.c",
+      "sha256": "c327c93b7fe2d19edf5005c518e96f3802acb7c4383b7f621d77f36a627df3c9"
+    },
+    {
+      "original": "library/padlock.h",
+      "path": "library/padlock.h",
+      "sha256": "f8015e4b9ab12b25e47ed5cc9d7fc778338a3d0fcbf075918cb383a6fa508418"
+    },
+    {
+      "original": "library/pem.c",
+      "path": "library/mbedtls_pem.c",
+      "sha256": "b9066b6b23e882d4cc742a45b868db2b049f62e2a65933372004828f69d3c098"
+    },
+    {
+      "original": "library/pk.c",
+      "path": "library/mbedtls_pk.c",
+      "sha256": "f6e9ea470481887d990c4627b7ac755a0d83a3aa9bd1a2be764c6e5b1f3c6311"
+    },
+    {
+      "original": "library/pkcs12.c",
+      "path": "library/mbedtls_pkcs12.c",
+      "sha256": "747acc63f82eb6fe7fee1ef56f1b1abd718f4a5da32920df49138a5e5a82f24e"
+    },
+    {
+      "original": "library/pkcs5.c",
+      "path": "library/mbedtls_pkcs5.c",
+      "sha256": "5080ca15488659065b3c880918d1b9c1627698fe5567508641bd6aaac94c2166"
+    },
+    {
+      "original": "library/pkcs7.c",
+      "path": "library/mbedtls_pkcs7.c",
+      "sha256": "9a309a2a8bdfafd6754a08bbbf90d4396caaefbba37c593f7416b5c59616827c"
+    },
+    {
+      "original": "library/pkparse.c",
+      "path": "library/mbedtls_pkparse.c",
+      "sha256": "701a0a80b4f148e70bf705714beabd35b6baa88eb37e26eeeefc728f5e7cadaa"
+    },
+    {
+      "original": "library/pkwrite.c",
+      "path": "library/mbedtls_pkwrite.c",
+      "sha256": "356de616dc09a6bb1fd6a7e39f617d81f5124e00a22ff7137f7c3adbc82e3a86"
+    },
+    {
+      "original": "library/pkwrite.h",
+      "path": "library/pkwrite.h",
+      "sha256": "2c368bc64359578c61ec5400bf115293a861a71291903947edce7914c7877380"
+    },
+    {
+      "original": "library/pk_ecc.c",
+      "path": "library/mbedtls_pk_ecc.c",
+      "sha256": "165b6835297bfc0c29d324a58776a9eb13341e420836ccfee222f1b64fbb39fa"
+    },
+    {
+      "original": "library/pk_internal.h",
+      "path": "library/pk_internal.h",
+      "sha256": "d823cd2c8131d65a6f015b49f7c9f909722cd8c007dbc1fb22e05d0c1c93b78f"
+    },
+    {
+      "original": "library/pk_wrap.c",
+      "path": "library/mbedtls_pk_wrap.c",
+      "sha256": "ea88112d7c630ad4a4dbf423bac6c9144139567fc58f62da7c5ee1d97e280bde"
+    },
+    {
+      "original": "library/pk_wrap.h",
+      "path": "library/pk_wrap.h",
+      "sha256": "1267b521563e1a28e25eecf6040d2e1ac04def04c49cc6b94accab8b5e5b5e90"
+    },
+    {
+      "original": "library/platform.c",
+      "path": "library/mbedtls_platform.c",
+      "sha256": "284853b382b05765f16986e17fe6031a6ce04d0dd5ccdb31c234a4e9baa126fd"
+    },
+    {
+      "original": "library/platform_util.c",
+      "path": "library/mbedtls_platform_util.c",
+      "sha256": "95a9d2ad52d8601d099240a083a25dafa2fb402fb5963f2444854dff897f391c"
+    },
+    {
+      "original": "library/poly1305.c",
+      "path": "library/mbedtls_poly1305.c",
+      "sha256": "ba9592c6fecef06c5acd8a11c783cec2cc2cb8d8561b14abd6e39353988358be"
+    },
+    {
+      "original": "library/psa_crypto.c",
+      "path": "library/mbedtls_psa_crypto.c",
+      "sha256": "5f216f2e1a6d40ca81cdb88db9aed0de9ec0aaa60fbf0185e564563eba1f4fe6"
+    },
+    {
+      "original": "library/psa_crypto_aead.c",
+      "path": "library/mbedtls_psa_crypto_aead.c",
+      "sha256": "1f57ee4958460bcda9404c0139e42f14139e06eb47b39b0abd3884abbba5dc60"
+    },
+    {
+      "original": "library/psa_crypto_aead.h",
+      "path": "library/psa_crypto_aead.h",
+      "sha256": "2d0afe44fd2ea69e5e68ed80cc050efdf0e4bcc03759cd0cdb27a63fe2de8b3d"
+    },
+    {
+      "original": "library/psa_crypto_cipher.c",
+      "path": "library/mbedtls_psa_crypto_cipher.c",
+      "sha256": "51074f70ee5b8a3701f1e8a0047646750e28827da716c1fc76438a604fc83609"
+    },
+    {
+      "original": "library/psa_crypto_cipher.h",
+      "path": "library/psa_crypto_cipher.h",
+      "sha256": "862baecb8eb6aa2504c556e235aae79bb54d497dfb93256b1fed4034f65341f8"
+    },
+    {
+      "original": "library/psa_crypto_client.c",
+      "path": "library/mbedtls_psa_crypto_client.c",
+      "sha256": "6d7686989bbf1847254a4176ec064ac8cdfa37a65f16258ec5328ec8f133cd0b"
+    },
+    {
+      "original": "library/psa_crypto_core.h",
+      "path": "library/psa_crypto_core.h",
+      "sha256": "0d40c771fb888826cc68c6877984c7b7aa491a983534073e90af4143d01c81fe"
+    },
+    {
+      "original": "library/psa_crypto_core_common.h",
+      "path": "library/psa_crypto_core_common.h",
+      "sha256": "0dfccb7dd8c8c5d94e2e1907f6eacc9c0b8658ae74007454aa05d978714a9150"
+    },
+    {
+      "original": "library/psa_crypto_driver_wrappers.h",
+      "path": "library/psa_crypto_driver_wrappers.h",
+      "sha256": "c0041e1b4ea71daef3f588d36137a5fb52734f5e6fc2c1e126c46799d318588b"
+    },
+    {
+      "original": "library/psa_crypto_driver_wrappers_no_static.c",
+      "path": "library/mbedtls_psa_crypto_driver_wrappers_no_static.c",
+      "sha256": "9eff265a349e2172b06a7c67456380640a75b6682d9a86fdc5a0bc1be31b4e2a"
+    },
+    {
+      "original": "library/psa_crypto_driver_wrappers_no_static.h",
+      "path": "library/psa_crypto_driver_wrappers_no_static.h",
+      "sha256": "7614997862523b96af57696d230388b8950d40380bfe34f7426cdceef6e48a15"
+    },
+    {
+      "original": "library/psa_crypto_ecp.c",
+      "path": "library/mbedtls_psa_crypto_ecp.c",
+      "sha256": "b577d8466764c1804d207b7449da9891a62acf465a0525e52c6a06f8cc0c638d"
+    },
+    {
+      "original": "library/psa_crypto_ecp.h",
+      "path": "library/psa_crypto_ecp.h",
+      "sha256": "54a7ad34aa5be38478932e7bd9474fa0caf69c15444fdd99d63cc27a5ef3ca20"
+    },
+    {
+      "original": "library/psa_crypto_ffdh.c",
+      "path": "library/mbedtls_psa_crypto_ffdh.c",
+      "sha256": "4b89144c54edc2ba4ffd11cb8fe757aacbfbc9ed4e0d2671bbbbc5af7896799c"
+    },
+    {
+      "original": "library/psa_crypto_ffdh.h",
+      "path": "library/psa_crypto_ffdh.h",
+      "sha256": "5d877d28c6399ec6684e42edcdf322024c461928d1fb60d3ddba140fb99283df"
+    },
+    {
+      "original": "library/psa_crypto_hash.c",
+      "path": "library/mbedtls_psa_crypto_hash.c",
+      "sha256": "080234888039a139c0c5dab03582b158d867c7e228ac8ae3441b2b6287784119"
+    },
+    {
+      "original": "library/psa_crypto_hash.h",
+      "path": "library/psa_crypto_hash.h",
+      "sha256": "d6476e09f0da3accf9fd1a2fd01c574dd5d8ec13e12b7e809d5e6b9460b12a28"
+    },
+    {
+      "original": "library/psa_crypto_invasive.h",
+      "path": "library/psa_crypto_invasive.h",
+      "sha256": "bc0fe69a31e03bf40967c9e7a945a49a4bdfab3a1bf373a27c8c99755e171ee7"
+    },
+    {
+      "original": "library/psa_crypto_its.h",
+      "path": "library/psa_crypto_its.h",
+      "sha256": "a3a8812fc33dd76e75b3d89692a6f944e9e06af51aadb95d81dcd0c92d0a4f7f"
+    },
+    {
+      "original": "library/psa_crypto_mac.c",
+      "path": "library/mbedtls_psa_crypto_mac.c",
+      "sha256": "7ddbb9dd92f223939f95df32db052f04b2c6d87670850eb3598895fdcd0b37f5"
+    },
+    {
+      "original": "library/psa_crypto_mac.h",
+      "path": "library/psa_crypto_mac.h",
+      "sha256": "955e273bd8b79735c9af485ec88c9f9b13f0058649a91dd8533e9f452f813c10"
+    },
+    {
+      "original": "library/psa_crypto_pake.c",
+      "path": "library/mbedtls_psa_crypto_pake.c",
+      "sha256": "980914a71878e6473241c419c81c32638fda2a7bd57268bd8cbd7ba23cb2dd86"
+    },
+    {
+      "original": "library/psa_crypto_pake.h",
+      "path": "library/psa_crypto_pake.h",
+      "sha256": "ce3dae54a46b4807485454936e5f5998c24255ba133f6db689263d18d95ce81e"
+    },
+    {
+      "original": "library/psa_crypto_random.c",
+      "path": "library/mbedtls_psa_crypto_random.c",
+      "sha256": "422cdd743a8be3f13a4cb9a5d4047adbcdd6d17982e155240f36a17a04d941b5"
+    },
+    {
+      "original": "library/psa_crypto_random.h",
+      "path": "library/psa_crypto_random.h",
+      "sha256": "d15914636f96476e725626eac50c1a34660eebe317ed4f1fa6938ed8a51f6d9f"
+    },
+    {
+      "original": "library/psa_crypto_random_impl.h",
+      "path": "library/psa_crypto_random_impl.h",
+      "sha256": "75556223320fce8f278d11f377bc4f5d2316ed9849dc933d0833619e8ced84f8"
+    },
+    {
+      "original": "library/psa_crypto_rsa.c",
+      "path": "library/mbedtls_psa_crypto_rsa.c",
+      "sha256": "daddfb9b6802934651af52e3ca08003d7a1cb128dc087a677b2bc6d28e5f874b"
+    },
+    {
+      "original": "library/psa_crypto_rsa.h",
+      "path": "library/psa_crypto_rsa.h",
+      "sha256": "04945c30adbf2040da8c563aa4ba51dd9244093cbccd52140f280f29fb52efbe"
+    },
+    {
+      "original": "library/psa_crypto_se.c",
+      "path": "library/mbedtls_psa_crypto_se.c",
+      "sha256": "a48c97224365a1edc32fee0757d5f05c57c0738111f53ee6989bb326835b1cc0"
+    },
+    {
+      "original": "library/psa_crypto_se.h",
+      "path": "library/psa_crypto_se.h",
+      "sha256": "ea58a9b19c82da371aeee793046ed89afeae0d5715722aa6eb69ad84839d2b05"
+    },
+    {
+      "original": "library/psa_crypto_slot_management.c",
+      "path": "library/mbedtls_psa_crypto_slot_management.c",
+      "sha256": "bac3a36cdf3d700bcd3a4217cdfc797858faade1b16a2f07fbbbf20ec9230932"
+    },
+    {
+      "original": "library/psa_crypto_slot_management.h",
+      "path": "library/psa_crypto_slot_management.h",
+      "sha256": "10ec56609db2bddba5da160a0b511f0c36195ada4a83887ec385a5d63599e79c"
+    },
+    {
+      "original": "library/psa_crypto_storage.c",
+      "path": "library/mbedtls_psa_crypto_storage.c",
+      "sha256": "2536ec8b0075e5bdad6ee91dfbef13d813718044e66980296695f90b4ce63cdc"
+    },
+    {
+      "original": "library/psa_crypto_storage.h",
+      "path": "library/psa_crypto_storage.h",
+      "sha256": "c1e78c6de094d64311f44c4893e8e327bbeaa2fd28dc68b31adb0c699d47dbf2"
+    },
+    {
+      "original": "library/psa_its_file.c",
+      "path": "library/mbedtls_psa_its_file.c",
+      "sha256": "1c2a12a003fc883a667bd29a67e62d9863a83950ecef5540e6aa2873f08d0985"
+    },
+    {
+      "original": "library/psa_util.c",
+      "path": "library/mbedtls_psa_util.c",
+      "sha256": "54f60b467294821f71bdb5ca931008c70d729d6b0db219f4e87ec76520652a75"
+    },
+    {
+      "original": "library/psa_util_internal.h",
+      "path": "library/psa_util_internal.h",
+      "sha256": "39ab63730e6a2c333ab596d18bd935b02240ed6a5f6eac1c9a3be8a8b5e316c0"
+    },
+    {
+      "original": "library/ripemd160.c",
+      "path": "library/mbedtls_ripemd160.c",
+      "sha256": "959be6e26158db1f70e9bbdfe98f250a0e38c8abbdae4a5eda58ecdf2fc93321"
+    },
+    {
+      "original": "library/rsa.c",
+      "path": "library/mbedtls_rsa.c",
+      "sha256": "213b3e83cd3ec33baa642585bff02f72b01af3b18ecb8a95f668d6ddf5ecc2c7"
+    },
+    {
+      "original": "library/rsa_alt_helpers.c",
+      "path": "library/mbedtls_rsa_alt_helpers.c",
+      "sha256": "42b7e9cc7faf8a33ec051f1d759b3d468375ceb998df7ead8a638026b84c60bd"
+    },
+    {
+      "original": "library/rsa_alt_helpers.h",
+      "path": "library/rsa_alt_helpers.h",
+      "sha256": "dec381c984aa5a7fc4ef68f70ade0706b10c0c91128b714e6f78a1c49379f4ba"
+    },
+    {
+      "original": "library/rsa_internal.h",
+      "path": "library/rsa_internal.h",
+      "sha256": "d945b052afe1f9ea613f71a4023a3c4e21cb4b7f288c3620ab1aac6f234c5565"
+    },
+    {
+      "original": "library/sha1.c",
+      "path": "library/mbedtls_sha1.c",
+      "sha256": "92badce6be0ce42fd4b643f136505f03cab21bd6e5124ec9f548dca4e59fe496"
+    },
+    {
+      "original": "library/sha256.c",
+      "path": "library/mbedtls_sha256.c",
+      "sha256": "3f25eadbc487c8932d731e7990161d506113797d2c614053b270e9c5c92d1fcd"
+    },
+    {
+      "original": "library/sha3.c",
+      "path": "library/mbedtls_sha3.c",
+      "sha256": "bfac573209245d6a63030f02f85fe50ce0d92c7e259f690f5c48914ea50edc8d"
+    },
+    {
+      "original": "library/sha512.c",
+      "path": "library/mbedtls_sha512.c",
+      "sha256": "279785df8b9c5705713e868837d86bf253cd0b971b85cf9cc58a7c0932e24b86"
+    },
+    {
+      "original": "library/ssl_cache.c",
+      "path": "library/mbedtls_ssl_cache.c",
+      "sha256": "09669c763e44d84e9c6c51d0d1ee0f49b80505e2c3fbca387b0b07ba41a6c89e"
+    },
+    {
+      "original": "library/ssl_ciphersuites.c",
+      "path": "library/mbedtls_ssl_ciphersuites.c",
+      "sha256": "43e68d5391d465901198a320831ba46db58e9e801fbacef70e4232d4bc9fb9a0"
+    },
+    {
+      "original": "library/ssl_ciphersuites_internal.h",
+      "path": "library/ssl_ciphersuites_internal.h",
+      "sha256": "a19b4d5c292a571f9ed0b3e805e4042481db2103a995202265f6367f19398700"
+    },
+    {
+      "original": "library/ssl_client.c",
+      "path": "library/mbedtls_ssl_client.c",
+      "sha256": "80db387b86952ee1572c03ded01a2f33a3e45cf7673c3b053df893f995de8a2e"
+    },
+    {
+      "original": "library/ssl_client.h",
+      "path": "library/ssl_client.h",
+      "sha256": "0520ca19bfcd41f59c73107988197afaf1eb7cac843c011d4bdd706838afc761"
+    },
+    {
+      "original": "library/ssl_cookie.c",
+      "path": "library/mbedtls_ssl_cookie.c",
+      "sha256": "9ae6a156be1bb2bb29a15031e7130e80290c0e929c067bc19735bee5578ff3ca"
+    },
+    {
+      "original": "library/ssl_debug_helpers.h",
+      "path": "library/ssl_debug_helpers.h",
+      "sha256": "65e0e05e7871dd3d64bb0eff02751138e92b8e89ef0994675466e1e7784e20b3"
+    },
+    {
+      "original": "library/ssl_debug_helpers_generated.c",
+      "path": "library/mbedtls_ssl_debug_helpers_generated.c",
+      "sha256": "ddbf24ee0729538993b0663ec43e4836df32ad93870d74f95ce2d02f96b538ad"
+    },
+    {
+      "original": "library/ssl_misc.h",
+      "path": "library/ssl_misc.h",
+      "sha256": "988fded3c5e25e4a2b5ce22b09526f44635ab896643bae6bb0a8ab33f84d506b"
+    },
+    {
+      "original": "library/ssl_msg.c",
+      "path": "library/mbedtls_ssl_msg.c",
+      "sha256": "415337d938051987a29276c8bb06f7fc6a776a277adf01483a77840a896e1ca2"
+    },
+    {
+      "original": "library/ssl_ticket.c",
+      "path": "library/mbedtls_ssl_ticket.c",
+      "sha256": "84d244c03b91d483e20e3e71c2f489fe75c1632fa8ebdd59fae803b24f67f957"
+    },
+    {
+      "original": "library/ssl_tls.c",
+      "path": "library/mbedtls_ssl_tls.c",
+      "sha256": "8158ccc82dcc984fc8802f6acc96b38236c3c4dd3fbb9a528e6d30eaa35fea01"
+    },
+    {
+      "original": "library/ssl_tls12_client.c",
+      "path": "library/mbedtls_ssl_tls12_client.c",
+      "sha256": "634d2920660e8b1fe78592585b748485ef6024c83025abd5af2d1073edb10796"
+    },
+    {
+      "original": "library/ssl_tls12_server.c",
+      "path": "library/mbedtls_ssl_tls12_server.c",
+      "sha256": "2cbe3bbf06578880f81ec9af651deeafa633539a23b003139f3e1ff0c6258047"
+    },
+    {
+      "original": "library/ssl_tls13_client.c",
+      "path": "library/mbedtls_ssl_tls13_client.c",
+      "sha256": "0359a2069bfd0958322b254bfe25284011981c7f22c21573a6b223ec2e374e8d"
+    },
+    {
+      "original": "library/ssl_tls13_generic.c",
+      "path": "library/mbedtls_ssl_tls13_generic.c",
+      "sha256": "048b60cdeca822fa0ab9830e260f30b20fdc12fa4df91a640fa1eb8565843154"
+    },
+    {
+      "original": "library/ssl_tls13_invasive.h",
+      "path": "library/ssl_tls13_invasive.h",
+      "sha256": "7d8ca9c12f29f6d86d176a2b0ae35ac0c23948d6ec3d01e307e952acbf65b5d9"
+    },
+    {
+      "original": "library/ssl_tls13_keys.c",
+      "path": "library/mbedtls_ssl_tls13_keys.c",
+      "sha256": "0e2a6ab26d02dd199391ec532233265a3cd2e0b0754d7011fdda3033da96f8a9"
+    },
+    {
+      "original": "library/ssl_tls13_keys.h",
+      "path": "library/ssl_tls13_keys.h",
+      "sha256": "2c3dad97fa4cc945e2ffe8cd7abe22d28e29d05097a0e499d000d0635d139bdd"
+    },
+    {
+      "original": "library/ssl_tls13_server.c",
+      "path": "library/mbedtls_ssl_tls13_server.c",
+      "sha256": "b17e7e03fc718f2546bedd6aa12064548ae165fbbc6cd8dfc7bdee0ccdc422ca"
+    },
+    {
+      "original": "library/threading.c",
+      "path": "library/mbedtls_threading.c",
+      "sha256": "fe74fdd2797c005dd1c561ba3ee8be2eda6a5213e847f413e01646bbb5e45a35"
+    },
+    {
+      "original": "library/threading_internal.h",
+      "path": "library/threading_internal.h",
+      "sha256": "15aca845e8657059eb6734e8ddee369fbdccfc4de790fd6784edc5b997aa20d6"
+    },
+    {
+      "original": "library/timing.c",
+      "path": "library/mbedtls_timing.c",
+      "sha256": "4147e2c9dc0947eb614a009becc3b4155c8a308af5349d4cbd6daccec859f8c2"
+    },
+    {
+      "original": "library/version.c",
+      "path": "library/mbedtls_version.c",
+      "sha256": "8683e7826a8d7e9ab2a8e9f546deec7d7848b65420e177cbde281950f2c0fd69"
+    },
+    {
+      "original": "library/version_features.c",
+      "path": "library/mbedtls_version_features.c",
+      "sha256": "b29f807ee38fe7221ba7ca89c0924004ad36aa88b0de17661b462e648d7b0a9f"
+    },
+    {
+      "original": "library/x509.c",
+      "path": "library/mbedtls_x509.c",
+      "sha256": "f1258ed20df3d4a13710987194a549bd9c61cca3a8e5d3401cd01183fa0469f2"
+    },
+    {
+      "original": "library/x509write.c",
+      "path": "library/mbedtls_x509write.c",
+      "sha256": "193bc59bfd161b53c97a302904317acf99d64241dc60689db02bb588d8822dce"
+    },
+    {
+      "original": "library/x509write_crt.c",
+      "path": "library/mbedtls_x509write_crt.c",
+      "sha256": "3e239b40fe7e2e717cbd31dceaa217063bba7089aa34a188c503bca27557090d"
+    },
+    {
+      "original": "library/x509write_csr.c",
+      "path": "library/mbedtls_x509write_csr.c",
+      "sha256": "19a6cf320fea4f52de355cfae85d3a2b030c7e8fe6196319bcf0a322550f7abd"
+    },
+    {
+      "original": "library/x509_create.c",
+      "path": "library/mbedtls_x509_create.c",
+      "sha256": "203e1edadbd9e39755597a4cb76cfae87c668dabe9f2b544e29e404044d44613"
+    },
+    {
+      "original": "library/x509_crl.c",
+      "path": "library/mbedtls_x509_crl.c",
+      "sha256": "a2fa78b31a20a7ba20df63a591589f61dcc1368d1229984cf1dc7ae194335dc2"
+    },
+    {
+      "original": "library/x509_crt.c",
+      "path": "library/mbedtls_x509_crt.c",
+      "sha256": "8bd38765a0e5887fa77bac494a80795fc5d88cb4a5b7e33fe4b09301747cfae7"
+    },
+    {
+      "original": "library/x509_csr.c",
+      "path": "library/mbedtls_x509_csr.c",
+      "sha256": "cc5078c31cf2e87b66c74dde1ccdc299eb73146cd9108e906f22576e3bf6823c"
+    },
+    {
+      "original": "library/x509_internal.h",
+      "path": "library/x509_internal.h",
+      "sha256": "607dea709af49663f69e6ecb9285518841e2c40a1279e040a40440c0c7097afe"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作�
 - Rosalina: L + 十字下 + SELECTで開きます。`Language / 言語` で日本語・Englishを切り替え、Aで保存します。
 - 起動設定: SELECTを押しながら起動し、Xで言語を切り替えます。その場で反映・保存されます。
 - 配色: X→Aで標準の明るい紫・黒背景に戻します。背景テーマ画像は残ります。
+- 更新: Rosalinaの「その他の設定」→「Luma3DSを更新」で確認し、Aで更新します。設定・テーマ画像は保持されます。旧boot.firmはSDルートの `boot.firm.13.4Y.bak` に保存します。
 - メニュー操作: 長押し開始までの時間・連続移動の間隔などを設定できます。
 - 背景テーマ: `SD:/3ds/luma/RosaliaTheme/` に画像を置き、メニューで選びます。PNG・無圧縮BMP・ベースラインJPEG、最大1024×1024・4MB。320×240を推奨します。
 - FTP: Wi-Fiへ接続して開始し、接続待ちになったら表示IPのポート `5000` へ接続します。暗号化なし・パッシブモードを指定します。
@@ -29,4 +30,4 @@ Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生�
 
 ## ライセンス
 
-Luma3DSと改変部分は [GPLv3](LICENSE.txt) です。元の著作権・ライセンス表記は各ソースに保持しています。[美咲フォント](assets/fonts/LICENSE.txt)、[テーマ画像デコーダー](third_party/theme/LICENSE.txt)のライセンスも同梱しています。
+Luma3DSと改変部分は [GPLv3](LICENSE.txt) です。元の著作権・ライセンス表記は各ソースに保持しています。[美咲フォント](assets/fonts/LICENSE.txt)、[テーマ画像デコーダー](third_party/theme/LICENSE.txt)、[Mbed TLS](Luma3DS_v13_4/sysmodules/rosalina/third_party/mbedtls/LICENSE)のライセンスも同梱しています。

@@ -181,6 +181,7 @@ bool Theme_Disable(void)
     themePixels = NULL;
     themeSelected[0] = 0;
     themeLoaded = true;
+    AccentColor_Refresh();
     return true;
 }
 
@@ -269,6 +270,7 @@ void RosalinaMenu_Theme(void)
                 themeFree(themePixels, THEME_PIXEL_SIZE);
                 themePixels = pixels;
                 strcpy(themeSelected, themeNames[selected]);
+                AccentColor_Refresh();
                 return;
             }
             error = pixels ? "Unable to save settings." : "Unable to load image.\nPNG / BMP / baseline JPEG, up to 1024 x 1024.";

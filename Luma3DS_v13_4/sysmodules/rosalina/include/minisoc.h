@@ -56,3 +56,7 @@ static inline ssize_t socSend(int sockfd, const void *buf, size_t len, int flags
 u32 miniSocGetCachedHostId(void);
 
 u32 miniSocRefreshHostId(void);
+
+int socResolveIPv4(const char *hostname,u32 addresses[4]);
+int socSetNonBlocking(int sockfd);
+int socConnectAsync(int sockfd,const struct sockaddr *addr,socklen_t addrlen);
