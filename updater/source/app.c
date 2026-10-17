@@ -11,6 +11,7 @@ typedef struct JsonBuffer {
 
 static LightLock appLock;
 static Thread worker;
+static Handle workerHandle;
 static UpdaterAppView view;
 static UpdateManifest availableManifest;
 static unsigned char json[UPDATE_MAX_JSON];
@@ -133,6 +134,8 @@ static UpdateResult installRelease(const UpdateHooks *hooks)
 static void run(void *context)
 {
     (void)context;
+    LightLock_Lock(&appLock);
+    LightLock_Unlock(&appLock);
     UpdateHooks hooks={.cancel=cancelled,.progress=progress};
     UpdateResult result=installRequested?installRelease(&hooks):checkRelease(&hooks);
     LightLock_Lock(&appLock);
@@ -150,7 +153,18 @@ void UpdaterApp_Init(void)
     memset(&view,0,sizeof(view));
     memset(&availableManifest,0,sizeof(availableManifest));
     worker=NULL;
+    workerHandle=0;
     shutdownRequested=false;
+}
+
+static bool collectWorker(u64 timeout)
+{
+    if(!worker)return true;
+    if(R_FAILED(svcWaitSynchronization(workerHandle,timeout)))return false;
+    threadFree(worker);
+    worker=NULL;
+    workerHandle=0;
+    return true;
 }
 
 static bool request(bool install)
@@ -159,12 +173,7 @@ static bool request(bool install)
     bool allowed=!view.busy&&!shutdownRequested&&(!install||view.available);
     LightLock_Unlock(&appLock);
     if(!allowed)return false;
-    if(worker)
-    {
-        if(R_FAILED(threadJoin(worker,0)))return false;
-        threadFree(worker);
-        worker=NULL;
-    }
+    if(!collectWorker(0))return false;
     LightLock_Lock(&appLock);
     view.busy=true;
     view.cancelling=false;
@@ -175,18 +184,16 @@ static bool request(bool install)
     view.total=0;
     if(!install){view.available=false;view.version[0]=0;}
     installRequested=install;
-    LightLock_Unlock(&appLock);
     worker=threadCreate(run,NULL,65536,0x30,-2,false);
+    workerHandle=worker?threadGetHandle(worker):0;
     if(!worker)
     {
-        LightLock_Lock(&appLock);
         view.busy=false;
         view.result=UPDATE_ERR_BUSY;
         view.stage=UPDATE_STAGE_DONE;
-        LightLock_Unlock(&appLock);
-        return false;
     }
-    return true;
+    LightLock_Unlock(&appLock);
+    return worker!=NULL;
 }
 
 bool UpdaterApp_RequestCheck(void)
@@ -220,11 +227,6 @@ void UpdaterApp_Shutdown(void)
     shutdownRequested=true;
     if(view.busy)view.cancelling=true;
     LightLock_Unlock(&appLock);
-    if(worker)
-    {
-        threadJoin(worker,UINT64_MAX);
-        threadFree(worker);
-        worker=NULL;
-    }
+    while(!collectWorker(UINT64_MAX))svcSleepThread(1000000);
     UpdateStorage_Close();
 }

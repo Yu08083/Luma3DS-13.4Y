@@ -26,7 +26,8 @@ typedef struct Thread_tag {void (*entry)(void *);void *arg;bool done;} *Thread;
 #define FS_OPEN_READ 1
 void LightLock_Init(LightLock *);void LightLock_Lock(LightLock *);void LightLock_Unlock(LightLock *);
 Thread threadCreate(void (*)(void *),void *,size_t,int,int,bool);
-Result threadJoin(Thread,u64);void threadFree(Thread);
+Handle threadGetHandle(Thread);void threadFree(Thread);
+Result svcWaitSynchronization(Handle,u64);void svcSleepThread(int64_t);
 FS_Path fsMakePath(int,const void *);
 Result FSUSER_OpenArchive(FS_Archive *,int,FS_Path);
 Result FSUSER_CloseArchive(FS_Archive);
@@ -46,13 +47,17 @@ Result FSFILE_Close(Handle);
 static unsigned checks,mode,netCalls,beginCalls,writeCalls,installCalls,closeCalls,currentCalls,prepareCalls,gateCalls,freeCalls,lockDepth,bytesWritten,sequence,flushSequence,gateSequence;
 static char releaseJson[256],manifestJson[512];
 static struct Thread_tag mockThread;
+static bool kernelExited;
+static unsigned waitFailures;
 #define CHECK(v) do{++checks;if(!(v)){fprintf(stderr,"line %d: %s\n",__LINE__,#v);exit(1);}}while(0)
 void LightLock_Init(LightLock *p){*p=1;}
 void LightLock_Lock(LightLock *p){(void)p;CHECK(!lockDepth);++lockDepth;}
 void LightLock_Unlock(LightLock *p){(void)p;CHECK(lockDepth==1);--lockDepth;}
-Thread threadCreate(void (*entry)(void *),void *arg,size_t size,int prio,int core,bool detached){CHECK(size==65536&&prio==48&&core==-2&&!detached);if(mode==1)return NULL;mockThread=(struct Thread_tag){entry,arg,false};return &mockThread;}
-Result threadJoin(Thread thread,u64 timeout){CHECK(thread==&mockThread);if(!thread->done&&timeout==UINT64_MAX){thread->entry(thread->arg);thread->done=true;}return thread->done?0:-1;}
-void threadFree(Thread thread){CHECK(thread==&mockThread&&thread->done);++freeCalls;}
+Thread threadCreate(void (*entry)(void *),void *arg,size_t size,int prio,int core,bool detached){CHECK(size==65536&&prio==48&&core==-2&&!detached&&lockDepth==1);if(mode==1)return NULL;mockThread=(struct Thread_tag){entry,arg,false};kernelExited=false;return &mockThread;}
+Handle threadGetHandle(Thread thread){CHECK(thread==&mockThread&&!thread->done&&lockDepth==1);return 0x123;}
+Result svcWaitSynchronization(Handle handle,u64 timeout){CHECK(handle==0x123&&!lockDepth);if(waitFailures){--waitFailures;return -1;}if(timeout==UINT64_MAX){if(!mockThread.done){mockThread.entry(mockThread.arg);mockThread.done=true;}kernelExited=true;}return kernelExited?0:-1;}
+void svcSleepThread(int64_t time){CHECK(time==1000000&&!lockDepth&&!freeCalls);}
+void threadFree(Thread thread){CHECK(thread==&mockThread&&thread->done&&kernelExited);++freeCalls;}
 FS_Path fsMakePath(int type,const void *data){return (FS_Path){type,data};}
 Result FSUSER_OpenArchive(FS_Archive *archive,int id,FS_Path path){CHECK(id==ARCHIVE_SDMC&&path.type==PATH_EMPTY);if(mode==12)return -1;*archive=7;return 0;}
 Result FSUSER_CloseArchive(FS_Archive archive){CHECK(archive==7);return 0;}
@@ -75,12 +80,12 @@ UpdateResult UpdaterStorage_PrepareRead(void){++prepareCalls;flushSequence=++seq
 UpdateResult UpdateStorage_Install(void){CHECK(flushSequence&&gateSequence>flushSequence);++installCalls;return mode==9?UPDATE_ERR_HASH:UPDATE_OK;}
 void UpdateStorage_Close(void){++closeCalls;}
 static void reset(void){
-mode=netCalls=beginCalls=writeCalls=installCalls=closeCalls=currentCalls=prepareCalls=gateCalls=freeCalls=bytesWritten=sequence=flushSequence=gateSequence=0;CHECK(!lockDepth);
+mode=netCalls=beginCalls=writeCalls=installCalls=closeCalls=currentCalls=prepareCalls=gateCalls=freeCalls=bytesWritten=sequence=flushSequence=gateSequence=waitFailures=0;kernelExited=false;CHECK(!lockDepth);
 UpdaterApp_Init();
 strcpy(releaseJson,"{\"tag_name\":\"v13.4Y\",\"draft\":false,\"prerelease\":false}");
 strcpy(manifestJson,"{\"schema\":1,\"version\":\"v13.4Y\",\"asset\":\"boot.firm\",\"size\":1024,\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}");
 }
-static void work(void){CHECK(view.busy&&worker);worker->entry(worker->arg);worker->done=true;CHECK(!view.busy&&view.stage==UPDATE_STAGE_DONE&&!lockDepth);}
+static void work(void){CHECK(view.busy&&worker);worker->entry(worker->arg);worker->done=true;kernelExited=true;CHECK(!view.busy&&view.stage==UPDATE_STAGE_DONE&&!lockDepth);}
 int main(void){
 reset();CHECK(!UpdaterApp_RequestInstall());CHECK(UpdaterApp_RequestCheck());CHECK(!UpdaterApp_RequestCheck());work();CHECK(view.result==UPDATE_OK&&view.available&&netCalls==2&&currentCalls==1&&!beginCalls&&!gateCalls&&!strcmp(view.version,"v13.4Y"));
 for(unsigned m=1;m<=3;++m){reset();mode=m;bool started=UpdaterApp_RequestCheck();CHECK(m==1?!started:started);if(started)work();CHECK(!view.available);CHECK(view.result==(m==1?UPDATE_ERR_BUSY:m==2?UPDATE_CURRENT:UPDATE_ERR_SD));CHECK(gateCalls==(m==2));}
@@ -96,6 +101,8 @@ if(!expected)CHECK(!view.available&&bytesWritten==1024&&prepareCalls==1&&gateCal
 }
 reset();CHECK(UpdaterApp_RequestCheck());UpdaterApp_Shutdown();CHECK(!view.busy&&view.result==UPDATE_CANCELLED&&freeCalls==1&&!UpdaterApp_RequestCheck());
 UpdaterAppView snapshot;UpdaterApp_Snapshot(&snapshot);CHECK(!memcmp(&snapshot,&view,sizeof(view)));
+reset();CHECK(UpdaterApp_RequestCheck());work();kernelExited=false;CHECK(mockThread.done&&!view.busy&&!UpdaterApp_RequestCheck()&&!freeCalls);kernelExited=true;CHECK(UpdaterApp_RequestCheck()&&freeCalls==1);work();UpdaterApp_Shutdown();CHECK(freeCalls==2);
+reset();CHECK(UpdaterApp_RequestCheck());work();kernelExited=false;waitFailures=1;UpdaterApp_Shutdown();CHECK(freeCalls==1&&kernelExited&&!worker&&!workerHandle&&!waitFailures);
 printf("%u\n",checks);return 0;
 }
 """
@@ -109,7 +116,7 @@ printf("%u\n",checks);return 0;
     assert result.returncode==0,result.stdout+result.stderr
     result=subprocess.run([str(target)],env=env,capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
-    report=dict(result='pass',checks=int(result.stdout.strip()),source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),hardware_tested=False,boundary='actual app orchestration; platform threads/network/storage mocked; flush before module gate and safe shutdown verified')
+    report=dict(result='pass',checks=int(result.stdout.strip()),source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),hardware_tested=False,boundary='actual app orchestration; platform threads/network/storage mocked; flush before module gate; finished-flag before kernel exit prevents free; safe shutdown verified')
     (OUT/'proof.json').write_bytes((json.dumps(report,indent=2)+'\n').encode());print(json.dumps(report))
 
 if __name__=='__main__':main()
