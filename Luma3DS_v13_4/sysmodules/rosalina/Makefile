@@ -24,16 +24,15 @@ export HBLDR_DEFAULT_3DSX_TITLE_NAME ?= "hblauncher_loader"
                                                                                   
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source/gdb source/menus source/plugin source/redshift third_party/mbedtls/library
+SOURCES		:=	source source/gdb source/menus source/plugin source/redshift
 DATA		:=	source/gdb/xml data
-INCLUDES	:=	include include/gdb include/menus include/redshift third_party/mbedtls/include
+INCLUDES	:=	include include/gdb include/menus include/redshift
 
                                                                                   
                              
                                                                                   
 ARCH	:=	-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
-DEFINES := -DMBEDTLS_CONFIG_FILE=\"updater_tls_config.h\"
-DEFINES +=	-D__3DS__ -DHBLDR_DEFAULT_3DSX_TID="0x$(HBLDR_DEFAULT_3DSX_TID)ULL" -DHBLDR_DEFAULT_3DSX_TITLE_NAME="\"$(HBLDR_DEFAULT_3DSX_TITLE_NAME)\""
+DEFINES :=	-D__3DS__ -DHBLDR_DEFAULT_3DSX_TID="0x$(HBLDR_DEFAULT_3DSX_TID)ULL" -DHBLDR_DEFAULT_3DSX_TITLE_NAME="\"$(HBLDR_DEFAULT_3DSX_TITLE_NAME)\""
 
 FALSEPOSITIVES := -Wno-array-bounds -Wno-stringop-overflow -Wno-stringop-overread
                                                               
@@ -94,6 +93,7 @@ export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
 CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
+CFILES := $(filter-out updater%.c,$(CFILES))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))

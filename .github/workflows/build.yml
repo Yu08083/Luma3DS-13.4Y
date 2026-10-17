@@ -24,6 +24,7 @@ jobs:
       - run: python3 tests/ftp_listener.py
       - run: python3 tests/themes.py
       - run: python3 tests/theme_menu.py
+      - run: python3 tests/firm_modules.py
       - run: python3 tests/updater_format.py
       - run: python3 tests/updater_tls.py
       - run: python3 tests/updater_http.py
@@ -40,7 +41,6 @@ jobs:
       - run: python3 tools/update_font.py && git diff --exit-code -- '**/japanese_font.h'
 
   build:
-    needs: verify
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkitarm@sha256:15b79ce75822c289538d8153da5fa7aafe5e6adc32ad8a575a197beca0f0761b

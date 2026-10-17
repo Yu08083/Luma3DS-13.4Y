@@ -39,7 +39,6 @@
 #include "pmdbgext.h"
 #include "plugin.h"
 #include "process_patches.h"
-#include "menus/updater.h"
 
 typedef struct DspFirmSegmentHeader {
     u32 offset;
@@ -75,7 +74,6 @@ Menu miscellaneousMenu = {
         { "Update time and date via NTP", METHOD, .method = &MiscellaneousMenu_UpdateTimeDateNtp },
         { "Nullify user time offset", METHOD, .method = &MiscellaneousMenu_NullifyUserTimeOffset },
         { "Dump DSP firmware", METHOD, .method = &MiscellaneousMenu_DumpDspFirm },
-        { "Update Luma3DS", METHOD, .method = &RosalinaMenu_Update },
         {},
     }
 };

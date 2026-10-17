@@ -494,7 +494,6 @@ static const LangEntry g_labels[] =
     { "Up/Down: move  A: select  B: back  L/R: page", "上下: 移動 A: 決定 B: 戻る L/R: ページ" },
     { "Up/Down: select   A: save", "上下: 選択   A: 保存" },
     { "Up/Down: select  Left/Right: change", "十字上下: 項目選択  左右: 変更" },
-    { "Update Luma3DS", "Luma3DSを更新" },
     { "Update both screens: %s (L to toggle)   \n", "両画面を更新: %s (L: 切替)\n" },
     { "Update time and date via NTP", "NTPで日時を更新" },
     { "Use DPAD Left/Right to change hour offset.\nUse DPAD Up/Down to change minute offset.\nPress A when done.", "十字左右: 時間を変更\n十字上下: 分を変更\nA: 決定" },
