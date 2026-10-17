@@ -18,6 +18,7 @@ jobs:
       - run: python3 tests/boot.py
       - run: python3 tests/boot_menu.py
       - run: python3 tests/controls.py
+      - run: python3 tests/plugin_menu.py
       - run: python3 tests/display.py
       - run: python3 tests/font.py
       - run: python3 tests/ftp.py

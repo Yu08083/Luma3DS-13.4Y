@@ -16,7 +16,7 @@ s32 miniSocRefCount = 0;
 static s32 miniSocStateRefs;
 static LightLock miniSocLifecycle = (LightLock)1;
 static u32 socContextAddr = 0x08000000;
-static u32 socContextSize = 0x60000;
+static u32 socContextSize = 0x100000;
 static Handle miniSocHandle;
 static Handle miniSocMemHandle;
 static bool exclusiveStateEntered = false;

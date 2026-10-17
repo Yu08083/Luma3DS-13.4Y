@@ -57,10 +57,10 @@ Menu rosalinaMenu = {
     "Rosalina menu",
     {
         { "Take screenshot", METHOD, .method = &RosalinaMenu_TakeScreenshot },
-        { "Wireless streaming...", METHOD, .method = &N3DSMenu_Streaming, .visibility = &menuCheckN3ds },
+        { "Screen capture (wireless)...", METHOD, .method = &N3DSMenu_Streaming, .visibility = &menuCheckN3ds },
         { "Screen filters...", MENU, .menu = &screenFiltersMenu },
         { "Cheats...", METHOD, .method = &RosalinaMenu_Cheats },
-        { "", METHOD, .method = PluginLoader__MenuCallback},
+        { "Plugin Loader: [Disabled]", METHOD, .method = PluginLoader__MenuCallback},
         { "New 3DS menu...", MENU, .menu = &N3DSMenu, .visibility = &menuCheckN3ds },
         { "Process list", METHOD, .method = &RosalinaMenu_ProcessList },
         { "Debugger options...", MENU, .menu = &debuggerMenu },

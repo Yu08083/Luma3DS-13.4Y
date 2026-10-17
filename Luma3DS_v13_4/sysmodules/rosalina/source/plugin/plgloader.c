@@ -87,7 +87,16 @@ void        PluginLoader__UpdateMenu(void)
         "Plugin Loader: [Enabled]"
     };
 
-    rosalinaMenu.items[3].title = status[PluginLoaderCtx.isEnabled];
+    for(u32 i=0;i<sizeof(rosalinaMenu.items)/sizeof(rosalinaMenu.items[0]);++i)
+    {
+        MenuItem *item=&rosalinaMenu.items[i];
+        if(item->action_type==MENU_END)break;
+        if(item->action_type==METHOD&&item->method==PluginLoader__MenuCallback)
+        {
+            item->title=status[PluginLoaderCtx.isEnabled];
+            break;
+        }
+    }
 }
 
 static ControlApplicationMemoryModeOverrideConfig g_memorymodeoverridebackup = { 0 };
