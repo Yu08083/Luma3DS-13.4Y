@@ -35,6 +35,7 @@ static u64 diskSize;
 static bool shortRead, failWrite;
 static int reboots, opens;
 #define R_FAILED(r) ((r) < 0)
+#define CUR_PROCESS_HANDLE 0xFFFF8001u
 #define ARCHIVE_SDMC 0
 #define PATH_EMPTY 0
 #define PATH_ASCII 0
@@ -60,6 +61,8 @@ static Result IFile_SetSize(IFile *f, u64 size) { (void)f; diskSize = size; retu
 static void PluginLoader__Error(const char *message, Result result) { (void)message; assert(result < 0); }
 static void svcKernelSetState(int state) { assert(state == 7); ++reboots; }
 static void svcFlushDataCacheRange(const void *data, u32 size) { (void)data; (void)size; }
+static Result svcFlushProcessDataCache(u32 process, u32 address, u32 size) { assert(process == CUR_PROCESS_HANDLE && address && size == 64); return 0; }
+static void svcFlushEntireDataCache(void) {}
 #define COLOR_TITLE 0
 #define COLOR_WHITE 0
 #define COLOR_YELLOW 0
@@ -89,6 +92,7 @@ loader = (module / 'source/plugin/file_loader.c').read_text()
 scan = loader[loader.index('typedef struct SensitivePath'):loader.index('static Result   OpenFile(IFile *file, const char *path)\n{')]
 memory = (module / 'source/plugin/memoryblock.c').read_text()
 globals_ = memory[memory.index('u32  g_loadSaveSwapArgs'):memory.index('Result     MemoryBlock__SetSize')]
+globals_ = globals_.replace('(u32)onlineBridge', '(u32)(uintptr_t)onlineBridge')
 swap = memory[memory.index('static Result swapFailure'):memory.index('Result     MemoryBlock__MountInProcess')]
 settings = memory[memory.index('Result MemoryBlock__SetSwapSettings'):memory.index('PluginHeader* MemoryBlock__GetMappedPluginHeader')]
 path_helpers = loader[loader.index('static bool PluginPathCanAppend'):loader.index('static Result   EnumeratePluginFiles')]
