@@ -53,7 +53,8 @@ bool MemoryBlock__OnlineBridgeSet(bool enabled)
         onlineBridge->requestedEnabled = enabled;
         __sync_synchronize();
         ++onlineBridge->requestSeq;
-        svcFlushDataCacheRange((const void *)onlineBridge, sizeof(*onlineBridge));
+        if(R_FAILED(svcFlushProcessDataCache(CUR_PROCESS_HANDLE, (u32)onlineBridge, sizeof(*onlineBridge))))
+            svcFlushEntireDataCache();
     }
     LightLock_Unlock(&onlineBridgeLock);
     return valid;

@@ -16,6 +16,7 @@ if not shutil.which(compiler) and os.name == 'nt':
 env = os.environ.copy()
 env['PATH'] = str(Path(compiler).parent) + os.pathsep + env.get('PATH', '')
 memory = (module / 'source/plugin/memoryblock.c').read_text(encoding='utf-8')
+legacy = (root / 'tests/fixtures/online_bridge/set_before_fix6.c').read_text(encoding='utf-8')
 bridge = memory[memory.index('static LightLock onlineBridgeLock'):memory.index('static void hashSwap')]
 mount = memory[memory.index('Result     MemoryBlock__MountInProcess'):memory.index('Result MemoryBlock__SetSwapSettings')]
 menu = (module / 'source/menus/online_bridge.c').read_text(encoding='utf-8')
@@ -37,6 +38,7 @@ prefix = r'''
 #include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
+#include <setjmp.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -55,7 +57,11 @@ typedef struct { u32 target; Error error; PluginHeader header; MemoryBlock membl
 static Context PluginLoaderCtx;
 static u32 g_memBlockSize;
 static unsigned lockDepth, flushes, mapCalls, failMap, unmapCalls;
-static const void *flushed;
+static unsigned rawFlushes, entireFlushes, cacheModelPhase;
+static Result processFlushResult;
+static jmp_buf cacheFault;
+static uintptr_t faultBegin, faultEnd;
+static uintptr_t flushed;
 static size_t flushedSize;
 #define R_FAILED(r) ((r) < 0)
 #define R_SUCCEEDED(r) ((r) >= 0)
@@ -63,7 +69,22 @@ static size_t flushedSize;
 #define MAPEXFLAGS_PRIVATE 1
 static void LightLock_Lock(LightLock *lock) { assert(*lock == 1 && !lockDepth); *lock = 0; ++lockDepth; }
 static void LightLock_Unlock(LightLock *lock) { assert(*lock == 0 && lockDepth == 1); *lock = 1; --lockDepth; }
-static void svcFlushDataCacheRange(const void *data, size_t size) { assert(lockDepth == 1); flushed = data; flushedSize = size; ++flushes; }
+static void svcFlushDataCacheRange(const void *data, size_t size) {
+    assert(lockDepth == 1);
+    ++rawFlushes;
+    if(cacheModelPhase) {
+        assert(cacheModelPhase == 1);
+        faultBegin = (uintptr_t)data; faultEnd = faultBegin + size;
+        longjmp(cacheFault, 1);
+    }
+    flushed = (uint32_t)(uintptr_t)data; flushedSize = size; ++flushes;
+}
+static Result svcFlushProcessDataCache(Handle process, u32 address, u32 size) {
+    assert(lockDepth == 1 && process == CUR_PROCESS_HANDLE);
+    flushed = address; flushedSize = size; ++flushes;
+    return processFlushResult;
+}
+static void svcFlushEntireDataCache(void) { assert(lockDepth == 1); ++entireFlushes; }
 static Result svcMapProcessMemoryEx(u32 target, u32 address, u32 current, u32 source, u32 size, u32 flags) {
     assert(lockDepth == 0 && target == 17 && current == CUR_PROCESS_HANDLE && flags <= 1);
     assert(source && size && (address == 0x07000000 || address == PluginLoaderCtx.header.heapVA));
@@ -186,7 +207,7 @@ static void testApi(void) {
     assert(MemoryBlock__OnlineBridgeSet(true));
     assert(guarded.box.requestSeq == 0 && guarded.box.requestedEnabled == 1 && guarded.box.acknowledgedSeq == UINT32_MAX);
     assert(guarded.box.state == 2 && guarded.box.error == 0x12345678 && !memcmp(reserved, guarded.box.reserved, sizeof(reserved)));
-    assert(flushes == 1 && flushed == &guarded.box && flushedSize == 64);
+    assert(flushes == 1 && flushed == (uint32_t)(uintptr_t)&guarded.box && flushedSize == 64);
     assert(MemoryBlock__OnlineBridgeGet(&status) && status.requestSeq != status.acknowledgedSeq);
     assert(MemoryBlock__OnlineBridgeSet(false) && guarded.box.requestSeq == 1 && !guarded.box.requestedEnabled);
     guarded.box.abi = 2; unsigned count = flushes;
@@ -211,6 +232,48 @@ static void testMappings(void) {
     assert(!MemoryBlock__MountInProcess() && !onlineBridge);
     g_memBlockSize = sizeof(image); image[sizeof(image) - 64] ^= 1;
     assert(!MemoryBlock__MountInProcess() && !onlineBridge);
+}
+static void testCacheOwnership(void) {
+    const uintptr_t mappingAddress = 0x073A0000;
+    const size_t mappingSize = 0x10000;
+    uint8_t *mapping;
+#ifdef _WIN32
+    mapping = VirtualAlloc((void *)mappingAddress, mappingSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    assert(mapping == (void *)mappingAddress);
+#else
+    mapping = mmap((void *)mappingAddress, mappingSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    assert(mapping == (void *)mappingAddress);
+#endif
+    OnlineBridgeMailbox *box = (OnlineBridgeMailbox *)(mapping + 0xB000);
+    *box = initial(); onlineBridge = box; cacheModelPhase = 1;
+    unsigned rawBefore = rawFlushes, processBefore = flushes, wholeBefore = entireFlushes;
+    if(setjmp(cacheFault) == 0) {
+        LegacyOnlineBridgeSet(true);
+        assert(false);
+    }
+    assert(faultBegin == 0x073AB000 && faultEnd == 0x073AB040);
+    assert(rawFlushes == rawBefore + 1 && flushes == processBefore);
+    assert(box->requestSeq == 1 && box->requestedEnabled == 1);
+    onlineBridgeLock = 1; lockDepth = 0;
+    cacheModelPhase = 2; *box = initial();
+    assert(MemoryBlock__OnlineBridgeSet(true));
+    assert(flushed == 0x073AB000 && flushedSize == 64 && flushes == processBefore + 1);
+    assert(rawFlushes == rawBefore + 1 && entireFlushes == wholeBefore);
+    assert(box->requestSeq == 1 && box->requestedEnabled == 1);
+    OnlineBridgeStatus status;
+    box->acknowledgedSeq = 1; box->state = 2;
+    assert(MemoryBlock__OnlineBridgeGet(&status) && status.acknowledgedSeq == 1 && status.state == 2);
+    processFlushResult = -77;
+    assert(MemoryBlock__OnlineBridgeSet(false));
+    assert(flushes == processBefore + 2 && entireFlushes == wholeBefore + 1);
+    assert(rawFlushes == rawBefore + 1 && box->requestSeq == 2 && box->requestedEnabled == 0);
+    processFlushResult = 0; cacheModelPhase = 0;
+    onlineBridgeClear();
+#ifdef _WIN32
+    assert(VirtualFree(mapping, 0, MEM_RELEASE));
+#else
+    assert(!munmap(mapping, mappingSize));
+#endif
 }
 static void testUi(void) {
     OnlineBridgeMailbox value = initial(); activeMailbox = &value; onlineBridge = &value;
@@ -245,12 +308,13 @@ static void testUi(void) {
 }
 int main(void) {
     assert(sizeof(OnlineBridgeMailbox) == 64);
-    testFind(); testApi(); testMappings(); testUi();
+    (void)svcFlushProcessDataCache; (void)svcFlushEntireDataCache;
+    testFind(); testApi(); testMappings(); testCacheOwnership(); testUi();
     puts("Online bridge: actual footer search, guard pages, invalid headers, canaries, locks, flushes, mappings, seq wrap, EN/JP immediate toggle and pending/apply UI passed");
 }
 '''
 source = generated / 'bridge.c'
-source.write_text(prefix + bridge + mount + labels + menu + suffix, encoding='utf-8')
+source.write_bytes((prefix + bridge + legacy + mount + labels + menu + suffix).encode('utf-8'))
 binary = generated / ('bridge.exe' if os.name == 'nt' else 'bridge')
 subprocess.run([compiler, '-D_DEFAULT_SOURCE', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-pointer-to-int-cast', '-O2', '-I', str(module / 'include'), str(source), '-o', str(binary)], check=True, env=env)
 subprocess.run([str(binary)], check=True, env=env)
@@ -321,7 +385,7 @@ int main(void) {
 }
 '''
 render_path = generated / 'bridge-render.c'
-render_path.write_text(render_prefix + labels + renderer + render_adapter + menu + render_main, encoding='utf-8')
+render_path.write_bytes((render_prefix + labels + renderer + render_adapter + menu + render_main).encode('utf-8'))
 render_binary = generated / ('bridge-render.exe' if os.name == 'nt' else 'bridge-render')
 subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-O2', '-I', str(module / 'include'), str(render_path), str(module / 'source/text.c'), '-o', str(render_binary)], check=True, env=env)
 subprocess.run([str(render_binary)], cwd=generated, check=True, env=env)
