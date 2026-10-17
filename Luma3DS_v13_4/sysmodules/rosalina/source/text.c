@@ -1,5 +1,6 @@
 #include "text.h"
 #include "japanese_font.h"
+#include "japanese_lookup.h"
 #include <stddef.h>
 
 uint32_t Text_Decode(const char **text)
@@ -60,16 +61,17 @@ uint32_t Text_MeasureWidth(const char *text)
 
 const uint8_t *Text_FindGlyph(uint32_t codepoint)
 {
-    uint32_t first = 0, last = sizeof(japaneseCodepoints) / sizeof(japaneseCodepoints[0]);
-    while (first < last)
-    {
-        uint32_t middle = first + (last - first) / 2;
-        if (japaneseCodepoints[middle] == codepoint)
-            return japaneseGlyphs[middle];
-        if (japaneseCodepoints[middle] < codepoint)
-            first = middle + 1;
-        else
-            last = middle;
-    }
-    return NULL;
+    if (codepoint > 0xFFFF)
+        return NULL;
+    uint32_t page = japanesePageMap[codepoint >> 8];
+    if (page == 255)
+        return NULL;
+    const JapaneseFontPage *lookup = &japanesePages[page];
+    uint32_t block = (codepoint & 255) >> 5;
+    uint32_t bit = 1u << (codepoint & 31);
+    uint32_t mask = lookup->masks[block];
+    if (!(mask & bit))
+        return NULL;
+    uint32_t index = lookup->first + lookup->ranks[block] + __builtin_popcount(mask & (bit - 1));
+    return japaneseGlyphs[index];
 }

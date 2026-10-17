@@ -42,7 +42,7 @@ jobs:
       - run: python3 tests/plugin_format.py
       - run: python3 tests/plugin_security.py
       - run: python3 tests/plguds_ipc.py
-      - run: python3 tools/update_font.py && git diff --exit-code -- '**/japanese_font.h'
+      - run: python3 tools/update_font.py && git diff --exit-code -- '**/japanese_font.h' '**/japanese_lookup.h'
 
   build:
     runs-on: ubuntu-latest

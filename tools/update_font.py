@@ -36,4 +36,24 @@ for version, source_directory, include_directory in targets:
     text += '\n'.join('    { ' + ', '.join(f'0x{row:02X}' for row in glyphs[cp]) + ' },' for cp in characters)
     text += '\n};\n'
     (include_directory / 'japanese_font.h').write_bytes(text.encode('utf-8'))
+    if version.endswith('Rosalina'):
+        pages = sorted({codepoint >> 8 for codepoint in characters})
+        page_map = [pages.index(page) if page in pages else 255 for page in range(256)]
+        text = '#pragma once\n\n#include <stdint.h>\n\n'
+        text += 'typedef struct JapaneseFontPage\n{\n    uint32_t masks[8];\n    uint16_t first;\n    uint8_t ranks[8];\n} JapaneseFontPage;\n\n'
+        text += 'static const uint8_t japanesePageMap[256] =\n{\n'
+        for index in range(0, 256, 16):
+            text += '    ' + ', '.join(str(value) for value in page_map[index:index + 16]) + ',\n'
+        text += '};\n\nstatic const JapaneseFontPage japanesePages[] =\n{\n'
+        first = 0
+        for page in pages:
+            members = [codepoint & 255 for codepoint in characters if codepoint >> 8 == page]
+            masks = [sum(1 << (value & 31) for value in members if value >> 5 == block) for block in range(8)]
+            ranks = [sum(1 for value in members if value < block * 32) for block in range(8)]
+            text += '    { { ' + ', '.join(f'0x{mask:08X}' for mask in masks) + ' }, ' + str(first)
+            text += ', { ' + ', '.join(str(value) for value in ranks) + ' } },\n'
+            first += len(members)
+        text += '};\n'
+        assert first == len(characters) and len(pages) < 255
+        (include_directory / 'japanese_lookup.h').write_bytes(text.encode('utf-8'))
     print(version, len(characters), 'glyphs')
