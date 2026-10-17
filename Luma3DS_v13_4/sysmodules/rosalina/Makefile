@@ -160,7 +160,7 @@ $(OUTPUT).elf	:	$(OFILES)
 	@$(LD) $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@
 	@$(NM) -CSn $@ > $(notdir $*.lst)
 
-draw.o: CFLAGS += -O3
+draw.o: CFLAGS += -O2
 remote_play.o rp_jpeg.o rp_kcopy.o: CFLAGS += -fstack-usage
 
 $(OFILES_SRC)	: $(HFILES_BIN)
