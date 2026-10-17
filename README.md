@@ -17,6 +17,8 @@ Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作�
 
 fix3は起動時のFIRMモジュール容量超過を修正した版です。更新機能は常駐モジュールから外しています。
 
+更新には別アプリの [Luma3DS 13.4Y Updater](updater/README.md) を使用します。
+
 ## ビルド
 
 リリースの `Luma3DS-v13.4Y-source.zip`、またはこのリポジトリのソースを使用します。devkitProの3DS環境、git、make、Python 3、makerom、firmtoolを用意し、空白・日本語を含まないパスで実行します。

@@ -12,3 +12,7 @@ tests/generated/
 *.d
 *.map
 Luma3DS_v13_4/sysmodules/sysmodules.bin
+updater/*.cia
+updater/*.3dsx
+updater/*.smdh
+updater/*.bnr

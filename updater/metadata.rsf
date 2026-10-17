@@ -1,0 +1,121 @@
+BasicInfo:
+  Title: LumaYUpd
+  CompanyCode: "00"
+  ProductCode: CTR-P-Y134
+  Logo: Homebrew
+
+TitleInfo:
+  Category: Application
+  UniqueId: 0xF134A
+  Version: 1
+
+Option:
+  UseOnSD: true
+  FreeProductCode: true
+  MediaFootPadding: false
+  EnableCrypt: false
+  EnableCompress: true
+
+AccessControlInfo:
+  CoreVersion: 2
+  DescVersion: 2
+  ReleaseKernelMajor: "02"
+  ReleaseKernelMinor: "46"
+  UseExtSaveData: false
+  FileSystemAccess:
+    - DirectSdmc
+  MemoryType: Application
+  SystemMode: 64MB
+  IdealProcessor: 0
+  AffinityMask: 1
+  Priority: 48
+  MaxCpu: 0x9E
+  HandleTableSize: 0x200
+  DisableDebug: true
+  EnableForceDebug: false
+  CanWriteSharedPage: true
+  CanUsePrivilegedPriority: false
+  CanUseNonAlphabetAndNumber: true
+  PermitMainFunctionArgument: true
+  CanShareDeviceMemory: false
+  RunnableOnSleep: false
+  SpecialMemoryArrange: true
+  SystemModeExt: Legacy
+  CpuSpeed: 268MHz
+  EnableL2Cache: false
+  CanAccessCore2: false
+  SystemCallAccess:
+    ControlMemory: 1
+    QueryMemory: 2
+    ExitProcess: 3
+    CreateThread: 8
+    ExitThread: 9
+    SleepThread: 10
+    GetThreadPriority: 11
+    SetThreadPriority: 12
+    CreateMutex: 19
+    ReleaseMutex: 20
+    CreateSemaphore: 21
+    ReleaseSemaphore: 22
+    CreateEvent: 23
+    SignalEvent: 24
+    ClearEvent: 25
+    CreateMemoryBlock: 30
+    MapMemoryBlock: 31
+    UnmapMemoryBlock: 32
+    CreateAddressArbiter: 33
+    ArbitrateAddress: 34
+    CloseHandle: 35
+    WaitSynchronization1: 36
+    WaitSynchronizationN: 37
+    DuplicateHandle: 39
+    GetSystemTick: 40
+    GetSystemInfo: 42
+    GetProcessInfo: 43
+    ConnectToPort: 45
+    SendSyncRequest: 50
+    GetProcessId: 53
+    GetResourceLimit: 56
+    GetResourceLimitLimitValues: 57
+    GetResourceLimitCurrentValues: 58
+    Break: 60
+    OutputDebugString: 61
+    InvalidateProcessDataCache: 82
+    StoreProcessDataCache: 83
+    FlushProcessDataCache: 84
+  ServiceAccessControl:
+    - APT:U
+    - ac:u
+    - cfg:u
+    - fs:USER
+    - gsp::Gpu
+    - hid:USER
+    - ndm:u
+    - ps:ps
+    - soc:U
+
+SystemControlInfo:
+  SaveDataSize: 0KB
+  RemasterVersion: 1
+  StackSize: 0x10000
+  Dependency:
+    ac: 0x0004013000002402
+    am: 0x0004013000001502
+    cfg: 0x0004013000001702
+    codec: 0x0004013000001802
+    dlp: 0x0004013000002802
+    dsp: 0x0004013000001A02
+    gpio: 0x0004013000001B02
+    gsp: 0x0004013000001C02
+    hid: 0x0004013000001D02
+    i2c: 0x0004013000001E02
+    mcu: 0x0004013000001F02
+    ndm: 0x0004013000002B02
+    nim: 0x0004013000002C02
+    nwm: 0x0004013000002D02
+    pdn: 0x0004013000002102
+    ps: 0x0004013000003102
+    ptm: 0x0004013000002202
+    ro: 0x0004013000003702
+    socket: 0x0004013000002E02
+    spi: 0x0004013000002302

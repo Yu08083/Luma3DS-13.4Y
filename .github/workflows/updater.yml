@@ -1,0 +1,67 @@
+name: Build Luma3DS 13.4Y Updater
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'updater/**'
+      - 'Luma3DS_v13_4/sysmodules/rosalina/source/updater*'
+      - 'Luma3DS_v13_4/sysmodules/rosalina/include/updater*'
+      - 'Luma3DS_v13_4/sysmodules/rosalina/third_party/mbedtls/**'
+      - '.github/workflows/updater.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 tests/updater_ui.py
+      - run: python3 updater/tests/firm_gate.py
+      - run: python3 updater/tests/app.py
+
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm@sha256:15b79ce75822c289538d8153da5fa7aafe5e6adc32ad8a575a197beca0f0761b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install build tools
+        shell: bash
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends g++ python3-venv unzip libpng-dev libvorbis-dev
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git clone https://github.com/devkitPro/libctru.git /tmp/updater-libctru
+          git -C /tmp/updater-libctru checkout 36fe1ada5b7ebe53ba4decda36d764a55f8fefb6
+          sed -i 's/-Werror//g' /tmp/updater-libctru/libctru/Makefile
+          make -C /tmp/updater-libctru/libctru -j2
+          echo 'CTRULIB=/tmp/updater-libctru/libctru' >> "$GITHUB_ENV"
+          git clone https://github.com/3DSGuy/Project_CTR.git /tmp/project-ctr
+          git -C /tmp/project-ctr checkout e8f5f529c54ff9b22a2491a480ffa69206bf7b19
+          make -C /tmp/project-ctr/makerom deps -j2
+          make -C /tmp/project-ctr/makerom -j2
+          install /tmp/project-ctr/makerom/bin/makerom /usr/local/bin/makerom
+          git clone https://github.com/Epicpkmn11/bannertool.git /tmp/bannertool
+          git -C /tmp/bannertool checkout e21f280f0336b6e9dfa5a8a76684c9cea2bd0d3b
+          git config --global url."https://github.com/".insteadOf git://github.com/
+          git -C /tmp/bannertool submodule update --init --recursive
+          make -C /tmp/bannertool -j2 VERSION_MAJOR=1 VERSION_MINOR=2 VERSION_MICRO=2
+          install "$(find /tmp/bannertool/output -type f -name bannertool -print -quit)" /usr/local/bin/bannertool
+      - name: Build updater
+        shell: bash
+        run: |
+          make -C updater -j2
+      - name: Updater
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Luma3DS-13.4Y-Updater
+          path: |
+            updater/*.cia
+            updater/*.3dsx
+            updater/*.elf
+            updater/build/*.map
+          if-no-files-found: error
