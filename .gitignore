@@ -16,3 +16,4 @@ updater/*.cia
 updater/*.3dsx
 updater/*.smdh
 updater/*.bnr
+updater/cia-proof.json
