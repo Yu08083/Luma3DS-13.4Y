@@ -22,6 +22,7 @@ jobs:
       - run: python3 tests/updater_ui.py
       - run: python3 updater/tests/firm_gate.py
       - run: python3 updater/tests/app.py
+      - run: python3 updater/tests/main.py
 
   build:
     runs-on: ubuntu-latest
@@ -47,9 +48,9 @@ jobs:
           install /tmp/project-ctr/makerom/bin/makerom /usr/local/bin/makerom
           git clone https://github.com/Epicpkmn11/bannertool.git /tmp/bannertool
           git -C /tmp/bannertool checkout e21f280f0336b6e9dfa5a8a76684c9cea2bd0d3b
-          git config --global url."https://github.com/".insteadOf git://github.com/
-          git -C /tmp/bannertool submodule update --init --recursive
-          make -C /tmp/bannertool -j2 VERSION_MAJOR=1 VERSION_MINOR=2 VERSION_MICRO=2
+          git clone https://github.com/Steveice10/buildtools.git /tmp/bannertool/buildtools
+          git -C /tmp/bannertool/buildtools checkout b7043ff1854be48ef0d055bba81b0a69a5bc892f
+          make -C /tmp/bannertool -j2 VERSION_MAJOR=1 VERSION_MINOR=2 VERSION_MICRO=2 BUILD_FLAGS=-Wno-unused-function
           install "$(find /tmp/bannertool/output -type f -name bannertool -print -quit)" /usr/local/bin/bannertool
       - name: Build updater
         shell: bash
