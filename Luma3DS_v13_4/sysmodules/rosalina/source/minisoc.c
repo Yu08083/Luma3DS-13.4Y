@@ -395,6 +395,24 @@ int socListen(int sockfd, int max_connections)
     return 0;
 }
 
+static void copySockaddr(struct sockaddr *addr, socklen_t *addrlen, const u8 *source)
+{
+    if(addr == NULL || addrlen == NULL)
+        return;
+    u32 length = source[0];
+    if(length < 2 || length > 0x1c)
+    {
+        *addrlen = 0;
+        return;
+    }
+    u32 size = *addrlen < length ? *addrlen : length;
+    u16 family = source[1];
+    memcpy(addr, &family, size < 2 ? size : 2);
+    if(size > 2)
+        memcpy(addr->sa_data, source + 2, size - 2);
+    *addrlen = length;
+}
+
 int socAccept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
     Result ret = 0;
@@ -434,12 +452,7 @@ int socAccept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
         
 
     if(ret >= 0 && addr != NULL)
-    {
-        addr->sa_family = tmpaddr[1];
-        if(*addrlen > tmpaddr[0])
-            *addrlen = tmpaddr[0];
-        memcpy(addr->sa_data, &tmpaddr[2], *addrlen - 2);
-    }
+        copySockaddr(addr, addrlen, tmpaddr);
 
     if(ret < 0)
         return ret;
@@ -660,12 +673,8 @@ static ssize_t _socuipc_cmd7(int sockfd, void *buf, size_t len, int flags, struc
         return ret;
     }
 
-    if(src_addr != NULL) {
-        src_addr->sa_family = tmpaddr[1];
-        if(*addrlen > tmpaddr[0])
-            *addrlen = tmpaddr[0];
-        memcpy(src_addr->sa_data, &tmpaddr[2], *addrlen - 2);
-    }
+    if(src_addr != NULL)
+        copySockaddr(src_addr, addrlen, tmpaddr);
 
     return ret;
 }
@@ -717,12 +726,8 @@ static ssize_t _socuipc_cmd8(int sockfd, void *buf, size_t len, int flags, struc
         return ret;
     }
 
-    if(src_addr != NULL) {
-        src_addr->sa_family = tmpaddr[1];
-        if(*addrlen > tmpaddr[0])
-            *addrlen = tmpaddr[0];
-        memcpy(src_addr->sa_data, &tmpaddr[2], *addrlen - 2);
-    }
+    if(src_addr != NULL)
+        copySockaddr(src_addr, addrlen, tmpaddr);
 
     return ret;
 }

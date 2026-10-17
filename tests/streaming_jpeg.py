@@ -6,6 +6,7 @@ import mmap
 import os
 from pathlib import Path
 import random
+import re
 import shutil
 import struct
 import subprocess
@@ -327,10 +328,125 @@ for width, rows, format_value in ((16, 16, 0), (240, 400, 0), (240, 320, 1)):
         src.close()
         out.close()
 
+remote_path = module / 'source/remote_play.c'
+remote_source = remote_path.read_text(encoding='utf-8')
+
+
+def declaration(start, closing):
+    offset = remote_source.index(start)
+    end = remote_source.index(closing, offset) + len(closing)
+    return remote_source[offset:end]
+
+
+retry_helper = declaration('static u32 encodeCapture(', '\n}')
+slot_type = declaration('typedef struct JpegSlot\n', '} JpegSlot;')
+capture_type = declaration('typedef struct Capture\n', '} Capture;')
+capacity = int(re.search(r'#define JPEG_SLOT_CAP\s+\((\d+) \* 1024\)', remote_source)[1]) * 1024
+assert capacity == 128 * 1024
+retry_prefix = r'''
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include "rp_jpeg.h"
+typedef uint8_t u8;
+typedef uint32_t u32;
+typedef uint64_t u64;
+#define JPEG_SLOT_CAP (128 * 1024)
+#define CAPTURE_CAP 384000
+static struct { RpJpeg jpeg; } enc;
+static bool stopRequested,preTerminationRequested;
+static unsigned attempts,history[8],stopAfter,preAfter;
+static u32 tracedEncode(const RpJpeg *encoder,u8 *out,u32 outCap,const u8 *src,u32 srcSize,
+                        u32 width,u32 rows,u32 stride,u32 step,int format)
+{
+    if(attempts<8)history[attempts]=encoder->quality;
+    ++attempts;
+    u32 size=RpJpeg_Encode(encoder,out,outCap,src,srcSize,width,rows,stride,step,format);
+    if(stopAfter&&attempts==stopAfter)stopRequested=true;
+    if(preAfter&&attempts==preAfter)preTerminationRequested=true;
+    return size;
+}
+#define RpJpeg_Encode tracedEncode
+'''
+retry_suffix = r'''
+#undef RpJpeg_Encode
+static struct { u8 prefix[64]; JpegSlot slot; u8 suffix[64]; } guarded;
+void Retry_Init(int quality,int stop,int pre,unsigned afterStop,unsigned afterPre)
+{
+    memset(&guarded,0xA7,sizeof(guarded));
+    attempts=0;memset(history,0,sizeof(history));stopAfter=afterStop;preAfter=afterPre;
+    stopRequested=stop!=0;preTerminationRequested=pre!=0;RpJpeg_SetQuality(&enc.jpeg,quality);
+}
+u32 Retry_Run(const u8 *pixels,u32 rows,u32 pitch,int format)
+{
+    Capture capture={0};capture.pixels=pixels;capture.rows=rows;capture.pitch=pitch;capture.format=format;
+    return encodeCapture(&guarded.slot,&capture);
+}
+unsigned Retry_Attempts(void) { return attempts; }
+unsigned Retry_History(unsigned index) { return index<8?history[index]:0; }
+int Retry_Quality(void) { return enc.jpeg.quality; }
+const u8 *Retry_Data(void) { return guarded.slot.data; }
+void Retry_Retrace(void) { attempts=0;memset(history,0,sizeof(history)); }
+int Retry_Guards(void)
+{
+    for(unsigned i=0;i<64;++i)if(guarded.prefix[i]!=0xA7||guarded.suffix[i]!=0xA7)return 0;
+    return 1;
+}
+'''
+retry_c = generated / 'retry.c'
+retry_c.write_bytes((retry_prefix + slot_type + capture_type + retry_helper + retry_suffix).encode())
+retry_path = generated / ('retry.dll' if os.name == 'nt' else 'retry.so')
+subprocess.run([compiler, '-shared', '-fPIC', '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror',
+                '-I' + str(module / 'include'), str(source_path), str(retry_c), '-o', str(retry_path)],
+               check=True, env=environment)
+retry = ctypes.CDLL(str(retry_path))
+retry.Retry_Init.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
+retry.Retry_Run.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_int]
+retry.Retry_Run.restype = ctypes.c_uint32
+retry.Retry_History.argtypes = [ctypes.c_uint]
+retry.Retry_Data.restype = ctypes.c_void_p
+for rows in (400, 320):
+    for seed in (0x134, 0x256, 0x134001):
+        data = random.Random(seed).randbytes(240 * rows * 3)
+        native = Buffer(len(data), data)
+        retry.Retry_Init(100, 0, 0, 0, 0)
+        count = retry.Retry_Run(native.pointer, rows, 720, 1)
+        assert 0 < count < capacity and retry.Retry_Attempts() == 2
+        assert [retry.Retry_History(index) for index in range(2)] == [100, 80]
+        assert retry.Retry_Quality() == 80 and retry.Retry_Guards()
+        jpeg = ctypes.string_at(retry.Retry_Data(), count)
+        decode(jpeg, (240, rows))
+        retry.Retry_Retrace()
+        repeated = retry.Retry_Run(native.pointer, rows, 720, 1)
+        assert repeated == count and retry.Retry_Attempts() == 1 and retry.Retry_History(0) == 80
+        assert ctypes.string_at(retry.Retry_Data(), repeated) == jpeg
+        native.check()
+        assert native.read() == data and retry.Retry_Guards()
+        cases.append({'case': 'actual-retry-100-overflow-recovers-80-and-persists',
+                      'rows': rows, 'seed': seed, 'jpeg_bytes': count, 'attempt_qualities': [100, 80],
+                      'following_frame_attempt_qualities': [80]})
+
+cancel_data = random.Random(0x134).randbytes(240 * 400 * 3)
+native = Buffer(len(cancel_data), cancel_data)
+for name, controls, expected_attempts in (
+        ('stop-before', (1, 0, 0, 0), 0), ('preterminate-before', (0, 1, 0, 0), 0),
+        ('stop-between-attempts', (0, 0, 1, 0), 1), ('preterminate-between-attempts', (0, 0, 0, 1), 1)):
+    retry.Retry_Init(100, *controls)
+    assert retry.Retry_Run(native.pointer, 400, 720, 1) == 0
+    assert retry.Retry_Attempts() == expected_attempts and retry.Retry_Guards()
+    cases.append({'case': 'actual-retry-' + name, 'encode_attempts': expected_attempts})
+for quality, history in ((100, [100, 80, 40, 1]), (80, [80, 40, 1]), (40, [40, 1]), (1, [1])):
+    retry.Retry_Init(quality, 0, 0, 0, 0)
+    assert retry.Retry_Run(native.pointer, 400, 720, 5) == 0
+    assert retry.Retry_Attempts() == len(history) and retry.Retry_Guards()
+    assert [retry.Retry_History(index) for index in range(len(history))] == history
+    cases.append({'case': 'actual-retry-final-failure-bounded', 'start_quality': quality,
+                  'attempt_qualities': history})
 assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source_hash
 report = {'all_passed': True, 'cases': cases, 'case_count': len(cases), 'decoder': 'Pillow ' + PIL.__version__,
+          'retry_helper_sha256': hashlib.sha256(retry_helper.encode()).hexdigest(),
           'sources': {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-                      for path in (source_path, header_path, Path(__file__))},
+                      for path in (source_path, header_path, remote_path, Path(__file__))},
           'hardware_tested': False}
 (generated / 'report.json').write_bytes((json.dumps(report, indent=2) + '\n').encode())
 print(str(len(cases)) + ' JPEG decoder/color/rotation/bounds cases passed')

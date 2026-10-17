@@ -223,6 +223,7 @@ low_prefix = r"""
 #include <string.h>
 #include <sys/types.h>
 typedef uint8_t u8;
+typedef uint16_t u16;
 typedef uint32_t u32;
 typedef int32_t Result;
 typedef int32_t s32;
@@ -294,6 +295,7 @@ for version in ('Luma3DS_v13_4',):
     code = function(source, 'miniSocRefreshHostId')
     options = []
     if version == 'Luma3DS_v13_4':
+        code += function(source, 'copySockaddr')
         code += function(source, '_socuipc_cmd8')
         options.append('-DTEST_SMALL_RECV')
     else:

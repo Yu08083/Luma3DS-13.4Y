@@ -333,7 +333,7 @@ int main(void)
 parts = [prefix, defines, '\n', declaration('NtrHeader'), declaration('ControlConn'),
          declaration('JpegSlot'), declaration('SenderState'),
          'static SenderState sender;\n#define snd sender\n',
-         ''.join(function(name) for name in ('ticksToUs', 'transient', 'applySettings',
+         ''.join(function(name) for name in ('statusIncrement', 'ticksToUs', 'transient', 'applySettings',
                  'handleRemotePlayRequest', 'handlePacket', 'readFromConn', 'writeToConn', 'sendFrame')),
          main]
 target = generated / 'protocol.c'
@@ -409,13 +409,39 @@ int main(void)
             cases += 5;
         }
     assert(svcCalls == cases);
+    for(u32 length = 0; length < 256; ++length)
+        for(u32 capacity = 0; capacity <= 35; ++capacity)
+        {
+            u8 source[28], output[48], expected[48];
+            memset(source, 0x67, sizeof(source));
+            source[0] = length; source[1] = AF_INET;
+            memset(output, 0xA5, sizeof(output));
+            memcpy(expected, output, sizeof(expected));
+            socklen_t size = capacity;
+            copySockaddr((struct sockaddr *)(void *)(output + 8), &size, source);
+            if(length >= 2 && length <= 28)
+            {
+                assert(size == length);
+                for(u32 byte = 0; byte < capacity && byte < length; ++byte)
+                    expected[8 + byte] = byte == 0 ? AF_INET : byte == 1 ? 0 : 0x67;
+            }
+            else
+                assert(size == 0);
+            assert(memcmp(output, expected, sizeof(output)) == 0);
+            ++cases;
+        }
+    u8 address[28] = {8, AF_INET};
+    socklen_t size = 0x12345678;
+    copySockaddr(NULL, &size, address);
+    assert(size == 0x12345678);
+    copySockaddr((struct sockaddr *)(void *)address, NULL, address);
     printf("%u\n", cases);
     return 0;
 }
 '''
 low_target = generated / 'minisoc.c'
 low_target.write_bytes((low_prefix + ''.join(function(name, low_source) for name in
-    ('socAccept', '_socuipc_cmd7', '_socuipc_cmd8', '_socuipc_cmd9', '_socuipc_cmda')) + low_main).encode('utf-8'))
+    ('copySockaddr', 'socAccept', '_socuipc_cmd7', '_socuipc_cmd8', '_socuipc_cmd9', '_socuipc_cmda')) + low_main).encode('utf-8'))
 low_exe = low_target.with_suffix('.exe' if os.name == 'nt' else '')
 subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-pointer-to-int-cast',
                 '-O2', str(low_target), '-o', str(low_exe)], check=True, env=env)

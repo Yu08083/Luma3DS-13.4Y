@@ -1,6 +1,6 @@
 # Luma3DS v13.4Y
 
-Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。更新日: 2026-10-17。
+Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。更新日: 2026-10-18。
 
 ## 導入
 
@@ -34,4 +34,4 @@ Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生�
 
 ## ライセンス
 
-Luma3DSと改変部分は [GPLv3](LICENSE.txt) です。元の著作権・ライセンス表記は各ソースに保持しています。[美咲フォント](assets/fonts/LICENSE.txt)、[テーマ画像デコーダー](third_party/theme/LICENSE.txt)、[Mbed TLS](Luma3DS_v13_4/sysmodules/rosalina/third_party/mbedtls/LICENSE)のライセンスも同梱しています。
+Luma3DSと改変部分は [GPLv3](LICENSE.txt) です。元の著作権・ライセンス表記は各ソースに保持しています。[美咲フォント](assets/fonts/LICENSE.txt)、[テーマ画像デコーダー](third_party/theme/LICENSE.txt)、[無線画面転送](third_party/streaming/LICENSE.txt)、[Mbed TLS](Luma3DS_v13_4/sysmodules/rosalina/third_party/mbedtls/LICENSE)のライセンスも同梱しています。

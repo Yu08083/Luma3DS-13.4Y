@@ -62,11 +62,12 @@ CFLAGS	:=	-g -std=gnu11 -Wall -Wextra $(WERROR) $(HARDERRORS) -Wno-unused-value 
 			$(FALSEPOSITIVES) $(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE)
+CFLAGS	+=	-flto
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
 ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map),-wrap,exit,--section-start,.text=0x14000000
+LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Os -flto -fstack-usage -Wl,-Map,$(notdir $*.map),-wrap,exit,--section-start,.text=0x14000000
 
 LIBS	:=	-lctru -lm
 

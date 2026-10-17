@@ -516,6 +516,7 @@ static const LangEntry g_labels[] =
     { "Warning", "警告" },
     { "Wi-Fi must be connected first.\n", "先にWi-Fiに接続してください。\n" },
     { "Wireless streaming", "無線映像転送" },
+    { "Wireless streaming...", "無線映像転送..." },
     { "Written: %lu KB   ", "書き込み済み: %lu KB   " },
     { "Wrote /luma/%016llX.txt", "保存先: /luma/%016llX.txt" },
     { "X: back to the warning", "X: 警告に戻る" },

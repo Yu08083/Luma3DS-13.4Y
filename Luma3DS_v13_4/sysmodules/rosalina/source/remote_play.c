@@ -116,6 +116,13 @@ static u32 settingMode, settingQuality, settingQos;
 
 static RemotePlayStatus status;
 
+static void statusIncrement(u32 *counter)
+{
+    LightLock_Lock(&settingsLock);
+    ++*counter;
+    LightLock_Unlock(&settingsLock);
+}
+
 static SavedViewer savedViewer;
 static bool savedViewerRead;
 
@@ -304,8 +311,10 @@ static bool cpuIsFast(void)
     s64 clk = 0, l2 = 0;
     svcGetSystemInfo(&clk, 0x10001, 0);
     svcGetSystemInfo(&l2, 0x10001, 2);
+    LightLock_Lock(&settingsLock);
     status.clockMhz = (u32)clk;
     status.l2Cache = l2 != 0;
+    LightLock_Unlock(&settingsLock);
     return clk != 268 && l2 != 0;
 }
 
@@ -617,6 +626,7 @@ static void encoderSpent(u32 kind, u64 from, u64 to)
     if (from < buffers->startTick)
         from = buffers->startTick;
 
+    LightLock_Lock(&settingsLock);
     while (from < to)
     {
         u32 s = secondOf(from);
@@ -626,6 +636,7 @@ static void encoderSpent(u32 kind, u64 from, u64 to)
         encEntry(s)->us[kind] += ticksToUs(end - from);
         from = end;
     }
+    LightLock_Unlock(&settingsLock);
 }
 
 static u32 framesIn(u32 s)
@@ -732,14 +743,18 @@ static bool captureOnce(bool top, Capture *c)
     {
         u8 *src = (u8 *)(VRAM_VA + (pa - VRAM_PA));
         svcFlushProcessDataCache(CUR_PROCESS_HANDLE, (u32)src, span);
+        LightLock_Lock(&settingsLock);
         status.lastFromFcram = false;
+        LightLock_Unlock(&settingsLock);
         return RpCopy_Rows(snapshot, CAPTURE_CAP, src, span, rows, stride, rowStep, rowBytes, &c->hash);
     }
 
     if (pa >= FCRAM_PA && pa < FCRAM_END && span <= FCRAM_END - pa)
     {
         svcFlushEntireDataCache();
+        LightLock_Lock(&settingsLock);
         status.lastFromFcram = true;
+        LightLock_Unlock(&settingsLock);
         return RpKernelCopy_Rows(snapshot, CAPTURE_CAP, KERNPA2VA(pa), rows, stride, rowStep, rowBytes, &c->hash);
     }
 
@@ -764,7 +779,7 @@ static bool captureScreen(bool top, Capture *c)
                 captured = true;
                 break;
             }
-            status.tornCopies++;
+            statusIncrement(&status.tornCopies);
         }
     }
     Draw_Unlock();
@@ -812,7 +827,7 @@ static int sendFrame(const JpegSlot *slot)
         snd.lastPacketTick = svcGetSystemTick();
         if (res != (int)(VIDEO_HEADER_SIZE + chunk))
         {
-            status.sendErrors++;
+            statusIncrement(&status.sendErrors);
             return transient(res) ? 0 : -1;
         }
 
@@ -821,9 +836,11 @@ static int sendFrame(const JpegSlot *slot)
         pkt[3]++;
     }
 
+    LightLock_Lock(&settingsLock);
     status.packets = packets;
     status.sendtoUs = ticksToUs(sendtoTicks);
     status.sleepUs = ticksToUs(sleepTicks);
+    LightLock_Unlock(&settingsLock);
     return size == 0 && !stopRequested && !linkDown ? 1 : 0;
 }
 
@@ -886,6 +903,22 @@ static int pickScreen(void)
     return -1;
 }
 
+static u32 encodeCapture(JpegSlot *slot, const Capture *capture)
+{
+    for (u32 attempt = 0; attempt < 4 && !stopRequested && !preTerminationRequested; ++attempt)
+    {
+        u32 size = RpJpeg_Encode(&enc.jpeg, slot->data, JPEG_SLOT_CAP, capture->pixels,
+            CAPTURE_CAP, 240, capture->rows, capture->pitch, 1, capture->format);
+        if (size != 0)
+            return size;
+        if (enc.jpeg.quality <= 1)
+            break;
+        int quality = enc.jpeg.quality > 80 ? 80 : enc.jpeg.quality > 40 ? 40 : 1;
+        RpJpeg_SetQuality(&enc.jpeg, quality);
+    }
+    return 0;
+}
+
 static void encoderThreadMain(void)
 {
     while (!stopRequested && !preTerminationRequested)
@@ -934,7 +967,7 @@ static void encoderThreadMain(void)
         if (!readable)
         {
             encoderSpent(ENC_BUSY, frameStart, copied);
-            status.skippedFrames++;
+            statusIncrement(&status.skippedFrames);
             svcSleepThread(5 * 1000 * 1000LL);
             continue;
         }
@@ -943,17 +976,17 @@ static void encoderThreadMain(void)
             && frameStart - sc->lastFrameTick < (u64)SAME_FRAME_RESEND_US * TICKS_PER_US)
         {
             encoderSpent(ENC_BUSY, frameStart, copied);
-            status.sameFrames++;
+            statusIncrement(&status.sameFrames);
             continue;
         }
 
-        u32 size = RpJpeg_Encode(&enc.jpeg, slot->data, JPEG_SLOT_CAP, c.pixels, CAPTURE_CAP, 240, c.rows, c.pitch, 1, c.format);
+        u32 size = encodeCapture(slot, &c);
         u64 encoded = svcGetSystemTick();
         encoderSpent(ENC_BUSY, frameStart, encoded);
 
         if (size == 0)
         {
-            status.skippedFrames++;
+            statusIncrement(&status.skippedFrames);
             svcSleepThread(5 * 1000 * 1000LL);
             continue;
         }
@@ -965,10 +998,13 @@ static void encoderThreadMain(void)
         if (++sc->frameId == 0)
             sc->frameId = 1;
 
+        LightLock_Lock(&settingsLock);
+        status.quality = enc.jpeg.quality;
         status.copyUs = ticksToUs(copied - frameStart);
         status.encodeUs = ticksToUs(encoded - copied);
         EncSecond *e = encEntry(secondOf(encoded));
         e->encodeMaxUs = maxU32(e->encodeMaxUs, ticksToUs(encoded - frameStart));
+        LightLock_Unlock(&settingsLock);
 
         slot->top = top;
         slot->frameId = sc->frameId;
@@ -1019,6 +1055,7 @@ static void senderThreadMain(void)
         if (linkDown || ok == 0)
             continue;
 
+        LightLock_Lock(&settingsLock);
         status.lastFrameBytes = size;
         status.sendUs = ticksToUs(sent - start);
         if (top)
@@ -1031,6 +1068,7 @@ static void senderThreadMain(void)
             e->framesTop++;
         else
             e->framesBottom++;
+        LightLock_Unlock(&settingsLock);
     }
 }
 

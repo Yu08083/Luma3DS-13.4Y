@@ -71,8 +71,15 @@ struct in_addr {u32 s_addr;};struct sockaddr {u16 sa_family;char data[14];};stru
 #include "rp_jpeg.h"
 #include "rp_kcopy.h"
 static unsigned checks,drawDepth,allocs,frees,socStarts,socStops,createCalls,joinCalls,copyCalls,flushes,closeCalls,nonblocks,clockRestores;
-static unsigned failStage,joinMask,copyChanges,metaChanges,formatChanges,selectorChanges,stopAfterSleeps,socExitFailures;
+static unsigned failStage,joinMask,copyChanges,metaChanges,formatChanges,selectorChanges,stopAfterSleeps,socExitFailures,jpegResult;
+static unsigned statusAccesses,historyAccesses;
+static bool stopOnCopy,stopOnEncode,stopOnSlotFreed,udpTransient;
 static volatile bool stopRequested;
+static LightLock settingsLock;
+static LightEvent slotFreed;
+static RemotePlayStatus *statusAccess(void);
+static u32 *statusCounterAccess(u32 *);
+static void *historyAccess(void *);
 static bool alive[4],allocationLive;
 static u32 allocationAddress=0x0e100000,allocationBytes;
 static u64 mockTick;
@@ -91,7 +98,7 @@ static u8 drawCache[FB_BOTTOM_SIZE];
 static void *framebufferCache=drawCache;
 static u32 framebufferCacheSize=sizeof(drawCache),gpuSavedFramebufferAddr1,gpuSavedFramebufferAddr2,gpuSavedFramebufferFormat,gpuSavedFramebufferStride,gpuSavedFramebufferSelect,gpuSavedFillColor;
 #define CHECK(v) do{++checks;if(!(v)){fprintf(stderr,"line %d: %s\n",__LINE__,#v);exit(1);}}while(0)
-static void Draw_Lock(void){CHECK(!drawDepth);++drawDepth;}
+static void Draw_Lock(void){CHECK(!drawDepth&&settingsLock==1);++drawDepth;}
 static void Draw_Unlock(void){CHECK(drawDepth==1);--drawDepth;}
 static void Draw_InvalidateFramebuffer(void){}
 static void Draw_FlushFramebuffer(void){++flushes;}
@@ -99,10 +106,10 @@ static void Draw_ClearFramebuffer(void){memset(FB_BOTTOM_VRAM_ADDR,0x34,FB_BOTTO
 static void LightLock_Lock(LightLock *lock){CHECK(*lock==1);*lock=0;}
 static void LightLock_Unlock(LightLock *lock){CHECK(*lock==0);*lock=1;}
 static void LightEvent_Init(LightEvent *event,int reset){(void)reset;*event=0;}
-static void LightEvent_Signal(LightEvent *event){*event=1;}
-static void LightEvent_WaitTimeout(LightEvent *event,s64 timeout){(void)event;CHECK(timeout>0&&timeout<=10000000);if(stopAfterSleeps&&!--stopAfterSleeps)stopRequested=true;}
+static void LightEvent_Signal(LightEvent *event){*event=1;if(stopOnSlotFreed&&event==&slotFreed)stopRequested=true;}
+static void LightEvent_WaitTimeout(LightEvent *event,s64 timeout){(void)event;CHECK(timeout>0&&timeout<=10000000&&settingsLock==1);if(stopAfterSleeps&&!--stopAfterSleeps)stopRequested=true;}
 static u64 svcGetSystemTick(void){mockTick+=268123;return mockTick;}
-static void svcSleepThread(s64 time){CHECK(time>=0);mockTick+=(u64)time/1000*268;if(stopAfterSleeps&&!--stopAfterSleeps)stopRequested=true;}
+static void svcSleepThread(s64 time){CHECK(time>=0&&settingsLock==1);mockTick+=(u64)time/1000*268;if(stopAfterSleeps&&!--stopAfterSleeps)stopRequested=true;}
 static u32 osGetKernelVersion(void){return 44<<8;}
 static Result svcGetSystemInfo(s64 *value,u32 type,u32 selector){CHECK(!drawDepth&&type==0x10001);*value=selector==0?804:1;return 0;}
 static Result svcKernelSetState(u32 op,u32 value){CHECK(!drawDepth&&op==10);if(value==3)++clockRestores;return 0;}
@@ -149,7 +156,7 @@ CHECK(mmap((void*)address,size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MA
 static Result svcControlMemoryEx(u32 *out,u32 requested,u32 source,u32 size,u32 op,u32 perm,bool linear){CHECK(!drawDepth&&requested==BUFFER_ADDR&&!source&&size==BUFFER_SIZE&&op==(MEMOP_ALLOC|MEMOP_REGION_SYSTEM)&&perm==MEMPERM_READWRITE&&linear);++allocs;if(failStage==1)return -11;CHECK(!allocationLive);allocationLive=true;allocationBytes=size;*out=allocationAddress;return 0;}
 static Result svcControlMemory(u32 *out,u32 address,u32 source,u32 size,u32 op,u32 perm){CHECK(!drawDepth&&!source&&op==MEMOP_FREE&&!perm&&allocationLive&&address==allocationAddress&&size==allocationBytes);for(unsigned k=1;k<4;++k)CHECK(!alive[k]);++frees;allocationLive=false;*out=address;return 0;}
 static Result MyThread_Create(MyThread *thread,void (*entry)(void),void *stack,u32 bytes,int priority,int affinity){CHECK(!drawDepth&&allocationLive&&stack>=(void*)buffers&&(uintptr_t)stack+bytes<=(uintptr_t)buffers+BUFFER_SIZE);++createCalls;if(failStage==6+createCalls)return -20-(int)createCalls;CHECK(createCalls<=3&&!alive[createCalls]);CHECK(priority==(createCalls==1?CONTROL_THREAD_PRIO:createCalls==2?SENDER_THREAD_PRIO:ENCODER_THREAD_PRIO));CHECK(affinity==(createCalls==1?CORE_SYSTEM:VIDEO_THREAD_CORE));thread->handle=createCalls;thread->ep=entry;thread->stacktop=(u8*)stack+bytes;alive[createCalls]=true;return 0;}
-static Result MyThread_Join(MyThread *thread,s64 timeout){CHECK(!drawDepth&&thread->handle>0&&thread->handle<4&&timeout==5000000000LL&&allocationLive);++joinCalls;unsigned handle=thread->handle;CHECK(alive[handle]);if(joinMask&(1u<<handle))return -99;alive[handle]=false;thread->handle=0;return 0;}
+static Result MyThread_Join(MyThread *thread,s64 timeout){CHECK(!drawDepth&&settingsLock==1&&thread->handle>0&&thread->handle<4&&timeout==5000000000LL&&allocationLive);++joinCalls;unsigned handle=thread->handle;CHECK(alive[handle]);if(joinMask&(1u<<handle))return -99;alive[handle]=false;thread->handle=0;return 0;}
 static Result miniSocInitEx(bool exclusive){CHECK(!drawDepth&&!exclusive);++socStarts;return failStage==2?-12:0;}
 static Result miniSocExitEx(bool exclusive){CHECK(!drawDepth&&!exclusive);for(unsigned k=1;k<4;++k)CHECK(!alive[k]);++socStops;if(socExitFailures){--socExitFailures;return -88;}return 0;}
 static int socSocket(int domain,int type,int protocol){CHECK(!drawDepth&&domain==AF_INET&&!protocol);return failStage==4?-14:type==SOCK_STREAM?40:41;}
@@ -162,14 +169,14 @@ static int socPoll(struct pollfd *fds,nfds_t count,int timeout){CHECK(!drawDepth
 static int socClose(int sock){CHECK(!drawDepth&&sock>=0);++closeCalls;return 0;}
 static int socSend(int sock,const void *data,size_t bytes,int flags){CHECK(!drawDepth);(void)sock;(void)data;(void)flags;return (int)bytes;}
 static int socRecv(int sock,void *data,size_t bytes,int flags){CHECK(!drawDepth);(void)sock;(void)data;(void)bytes;(void)flags;return -EAGAIN;}
-static int socSendto(int sock,const void *data,size_t bytes,int flags,const struct sockaddr *address,socklen_t size){CHECK(!drawDepth&&bytes<=1448&&size==sizeof(struct sockaddr_in));(void)sock;(void)data;(void)flags;(void)address;return (int)bytes;}
+static int socSendto(int sock,const void *data,size_t bytes,int flags,const struct sockaddr *address,socklen_t size){CHECK(!drawDepth&&settingsLock==1&&bytes<=1448&&size==sizeof(struct sockaddr_in));(void)sock;(void)data;(void)flags;(void)address;return udpTransient?-EAGAIN:(int)bytes;}
 uint32_t RpJpeg_BytesPerPixel(int format){return format==0?4:format==1?3:format>=2&&format<=4?2:0;}
 void RpJpeg_SetQuality(RpJpeg *jpeg,int quality){jpeg->quality=quality;}
-uint32_t RpJpeg_Encode(const RpJpeg *jpeg,u8 *out,u32 outCap,const u8 *src,u32 srcCap,u32 width,u32 rows,u32 stride,u32 rowStep,int format){CHECK(!drawDepth&&jpeg&&out&&src&&outCap==JPEG_SLOT_CAP&&srcCap==CAPTURE_CAP&&width==240&&(rows==320||rows==400)&&stride==width*RpJpeg_BytesPerPixel(format)&&rowStep==1);return 0;}
+uint32_t RpJpeg_Encode(const RpJpeg *jpeg,u8 *out,u32 outCap,const u8 *src,u32 srcCap,u32 width,u32 rows,u32 stride,u32 rowStep,int format){CHECK(!drawDepth&&settingsLock==1&&jpeg&&out&&src&&outCap==JPEG_SLOT_CAP&&srcCap==CAPTURE_CAP&&width==240&&(rows==320||rows==400)&&stride==width*RpJpeg_BytesPerPixel(format)&&rowStep==1);if(stopOnEncode)stopRequested=true;return jpegResult;}
 static void afterCopy(void){if(copyChanges){--copyChanges;if(copyTop)GPU_FB_TOP_LEFT_ADDR_1^=0x1000;else GPU_FB_BOTTOM_ADDR_1^=0x1000;}if(metaChanges){--metaChanges;if(copyTop)GPU_FB_TOP_STRIDE+=4;else GPU_FB_BOTTOM_STRIDE+=4;}if(formatChanges){--formatChanges;if(copyTop)GPU_FB_TOP_FMT=(GPU_FB_TOP_FMT&~7u)|((GPU_FB_TOP_FMT&7u)?0:2);else GPU_FB_BOTTOM_FMT=(GPU_FB_BOTTOM_FMT&~7u)|((GPU_FB_BOTTOM_FMT&7u)?0:2);}if(selectorChanges){--selectorChanges;if(copyTop)GPU_FB_TOP_SEL^=1;else GPU_FB_BOTTOM_SEL^=1;}}
-bool RpCopy_Rows(void *dst,u32 dstCap,const void *src,u32 srcCap,u32 rows,u32 stride,u32 rowStep,u32 rowBytes,u32 *hash){CHECK(drawDepth==1&&dst==buffers->capture&&dstCap==CAPTURE_CAP&&srcCap>=(rows-1)*stride*rowStep+rowBytes&&src&&(rows==320||rows==400)&&rowStep>=1&&rowStep<=2&&rows*rowBytes<=CAPTURE_CAP);++copyCalls;*hash=123;afterCopy();return true;}
+bool RpCopy_Rows(void *dst,u32 dstCap,const void *src,u32 srcCap,u32 rows,u32 stride,u32 rowStep,u32 rowBytes,u32 *hash){CHECK(drawDepth==1&&settingsLock==1&&dst==buffers->capture&&dstCap==CAPTURE_CAP&&srcCap>=(rows-1)*stride*rowStep+rowBytes&&src&&(rows==320||rows==400)&&rowStep>=1&&rowStep<=2&&rows*rowBytes<=CAPTURE_CAP);++copyCalls;*hash=123;afterCopy();if(stopOnCopy)stopRequested=true;return true;}
 bool RpKernelCopy_Rows(void *dst,u32 cap,u32 source,u32 rows,u32 stride,u32 step,u32 bytes,u32 *hash){CHECK(drawDepth==1&&source>=0xe0000000&&source<0xf0000000);return RpCopy_Rows(dst,cap,(void*)(uintptr_t)source,(rows-1)*stride*step+bytes,rows,stride,step,bytes,hash);}
-static void reset(void){CHECK(!allocationLive&&!buffers&&!controlThread.handle&&!senderThread.handle&&!encoderThread.handle);failStage=joinMask=copyCalls=copyChanges=metaChanges=createCalls=joinCalls=0;allocs=frees=socStarts=socStops=closeCalls=nonblocks=clockRestores=0;memset(alive,0,sizeof(alive));isN3DS=true;preTerminationRequested=false;running=stopRequested=false;framebufferActive=false;sleeping=false;settingsLock=lifecycleLock=1;allocationAddress=0x0e100000;GPU_FB_TOP_FMT=2|BIT(6);GPU_FB_BOTTOM_FMT=2;GPU_FB_TOP_STRIDE=GPU_FB_BOTTOM_STRIDE=480;GPU_FB_TOP_SEL=GPU_FB_BOTTOM_SEL=0;GPU_FB_TOP_LEFT_ADDR_1=0x18010000;GPU_FB_TOP_LEFT_ADDR_2=0x18110000;GPU_FB_TOP_RIGHT_ADDR_1=0x18010000;GPU_FB_TOP_RIGHT_ADDR_2=0x18110000;GPU_FB_BOTTOM_ADDR_1=0x18210000;GPU_FB_BOTTOM_ADDR_2=0x18310000;}
+static void reset(void){CHECK(!allocationLive&&!buffers&&!controlThread.handle&&!senderThread.handle&&!encoderThread.handle);failStage=joinMask=copyCalls=copyChanges=metaChanges=createCalls=joinCalls=0;allocs=frees=socStarts=socStops=closeCalls=nonblocks=clockRestores=0;selectorChanges=formatChanges=jpegResult=stopAfterSleeps=socExitFailures=0;stopOnCopy=stopOnEncode=stopOnSlotFreed=udpTransient=false;memset(alive,0,sizeof(alive));isN3DS=true;preTerminationRequested=false;running=stopRequested=false;framebufferActive=false;sleeping=false;settingsLock=lifecycleLock=1;allocationAddress=0x0e100000;GPU_FB_TOP_FMT=2|BIT(6);GPU_FB_BOTTOM_FMT=2;GPU_FB_TOP_STRIDE=GPU_FB_BOTTOM_STRIDE=480;GPU_FB_TOP_SEL=GPU_FB_BOTTOM_SEL=0;GPU_FB_TOP_LEFT_ADDR_1=0x18010000;GPU_FB_TOP_LEFT_ADDR_2=0x18110000;GPU_FB_TOP_RIGHT_ADDR_1=0x18010000;GPU_FB_TOP_RIGHT_ADDR_2=0x18110000;GPU_FB_BOTTOM_ADDR_1=0x18210000;GPU_FB_BOTTOM_ADDR_2=0x18310000;}
 static void captures(void){Capture c;copyTop=true;CHECK(captureScreen(true,&c)&&c.pa==GPU_FB_TOP_LEFT_ADDR_1&&c.rows==400&&!drawDepth);GPU_FB_TOP_SEL=1;CHECK(captureScreen(true,&c)&&c.pa==GPU_FB_TOP_LEFT_ADDR_2);GPU_FB_TOP_SEL=0;GPU_FB_BOTTOM_SEL=1;CHECK(captureScreen(true,&c)&&c.pa==GPU_FB_TOP_LEFT_ADDR_1);copyTop=false;CHECK(captureScreen(false,&c)&&c.pa==GPU_FB_BOTTOM_ADDR_2&&c.rows==320);GPU_FB_BOTTOM_SEL=0;
 unsigned before=copyCalls;Draw_Lock();Draw_SetupFramebuffer();Draw_Unlock();CHECK(framebufferActive&&!captureScreen(false,&c)&&copyCalls==before);Draw_Lock();Draw_RestoreFramebuffer();Draw_Unlock();CHECK(!framebufferActive&&captureScreen(false,&c));
 for(unsigned fmt=0;fmt<8;++fmt){copyTop=true;GPU_FB_TOP_FMT=fmt|BIT(6);GPU_FB_TOP_STRIDE=fmt<5?240*RpJpeg_BytesPerPixel(fmt):480;before=copyCalls;CHECK(captureScreen(true,&c)==(fmt<5));CHECK(copyCalls-before==(fmt<5));}
@@ -180,12 +187,17 @@ copyChanges=1;before=copyCalls;CHECK(captureScreen(true,&c)&&copyCalls==before+2
 metaChanges=1;before=copyCalls;CHECK(captureScreen(true,&c)&&copyCalls==before+2);metaChanges=3;before=copyCalls;CHECK(!captureScreen(true,&c)&&copyCalls==before+3);metaChanges=0;GPU_FB_TOP_STRIDE=960;GPU_FB_TOP_FMT=BIT(6);formatChanges=1;before=copyCalls;CHECK(captureScreen(true,&c)&&c.format==2&&copyCalls==before+2);formatChanges=3;before=copyCalls;CHECK(!captureScreen(true,&c)&&copyCalls==before+3);formatChanges=0;GPU_FB_TOP_STRIDE=480;GPU_FB_TOP_FMT=2|BIT(6);
 GPU_FB_TOP_LEFT_ADDR_2=GPU_FB_TOP_LEFT_ADDR_1;selectorChanges=1;before=copyCalls;CHECK(captureScreen(true,&c)&&copyCalls==before+2);selectorChanges=3;before=copyCalls;CHECK(!captureScreen(true,&c)&&copyCalls==before+3);selectorChanges=0;GPU_FB_TOP_SEL=0;
 before=copyCalls;stopRequested=true;CHECK(!captureScreen(true,&c)&&copyCalls==before);stopRequested=false;preTerminationRequested=true;CHECK(!captureScreen(true,&c)&&copyCalls==before);preTerminationRequested=false;}
+static void statistics(void){reset();CHECK(!RemotePlay_Start());RemotePlayStatus snapshot;u64 first=buffers->startTick;encoderSpent(ENC_BUSY,first,first+SYSCLOCK_ARM11);mockTick=first+SYSCLOCK_ARM11;RemotePlay_GetStatus(&snapshot);CHECK(snapshot.busyPct==100&&snapshot.clockMhz==804&&snapshot.l2Cache);
+applySettings(0x0100007f,0x100,75,QOS_DEFAULT,false);jpegResult=4;stopOnEncode=true;stopRequested=false;copyTop=true;encoderThreadMain();CHECK(stopRequested&&buffers->slots[0].size==4&&status.copyUs>0&&status.encodeUs>0);stopOnEncode=false;stopRequested=false;stopOnSlotFreed=true;senderThreadMain();CHECK(stopRequested&&status.framesTop==1&&status.lastFrameBytes==4);stopOnSlotFreed=false;
+JpegSlot *slot=&buffers->slots[0];slot->size=4;stopRequested=false;udpTransient=true;CHECK(sendFrame(slot)==0&&status.sendErrors==1);udpTransient=false;slot->size=0;
+memset(enc.screens,0,sizeof(enc.screens));jpegResult=0;stopOnEncode=true;stopRequested=false;encoderThreadMain();CHECK(status.skippedFrames==1&&stopRequested);stopOnEncode=false;
+ScreenState *sc=&enc.screens[1];sc->haveHash=true;sc->lastHash=123;sc->lastFrameTick=svcGetSystemTick();sc->lastPa=0;stopOnCopy=true;stopRequested=false;encoderThreadMain();CHECK(status.sameFrames==1&&stopRequested);stopOnCopy=false;RemotePlay_GetStatus(&snapshot);CHECK(snapshot.framesTop==1&&snapshot.sendErrors==1&&snapshot.sameFrames==1&&snapshot.skippedFrames==1);CHECK(statusAccesses>50&&historyAccesses>5);CHECK(!RemotePlay_Stop());}
 int main(void){mapAt(0x0e100000,0x100000);mapAt(0x1f000000,0x600000);reset();isN3DS=false;CHECK(RemotePlay_Start()<0&&!allocs&&!socStarts);reset();preTerminationRequested=true;CHECK(RemotePlay_Start()<0&&!allocs);reset();
 for(unsigned stage=1;stage<=9;++stage){reset();failStage=stage;CHECK(RemotePlay_Start()<0&&!running&&!buffers&&!allocationLive);CHECK(frees==(stage!=1)&&socStops==(stage>=3));}
 for(unsigned stage=8;stage<=9;++stage){for(unsigned mask=2;mask<=(stage==9?4u:2u);mask*=2){reset();failStage=stage;joinMask=mask;CHECK(RemotePlay_Start()<0&&running&&buffers&&allocationLive&&!frees&&!socStops);CHECK(RemotePlay_Start()<0);joinMask=0;CHECK(!RemotePlay_Stop()&&!running&&!buffers&&!allocationLive&&frees==1&&socStops==1);}}
 reset();allocationAddress=0x10000000;CHECK(RemotePlay_Start()<0&&!buffers&&!allocationLive&&frees==1&&!socStarts);
 reset();CHECK(!RemotePlay_Start()&&running&&buffers==(void*)(uintptr_t)allocationAddress&&allocs==1&&nonblocks==2&&createCalls==3);captures();sleeping=true;void (*entries[])(void)={controlThreadMain,encoderThreadMain,senderThreadMain};for(unsigned i=0;i<3;++i){stopRequested=false;stopAfterSleeps=1;buffers->slots[snd.slot].size=1;unsigned copies=copyCalls;entries[i]();CHECK(stopRequested&&!stopAfterSleeps&&copyCalls==copies);}sleeping=false;stopRequested=false;joinMask=4;CHECK(RemotePlay_Stop()<0&&running&&buffers&&allocationLive&&!frees&&!socStops);joinMask=0;CHECK(!RemotePlay_Stop()&&!running&&!buffers&&!allocationLive&&frees==1&&socStops==1);CHECK(!RemotePlay_Stop()&&frees==1);
-reset();CHECK(!RemotePlay_Start());socExitFailures=1;CHECK(RemotePlay_Stop()<0&&running&&socInitialized&&!frees&&buffers);CHECK(!RemotePlay_Stop()&&!running&&!socInitialized&&frees==1&&socStops==2);printf("%u\n",checks);return 0;}
+reset();CHECK(!RemotePlay_Start());socExitFailures=1;CHECK(RemotePlay_Stop()<0&&running&&socInitialized&&!frees&&buffers);CHECK(!RemotePlay_Stop()&&!running&&!socInitialized&&frees==1&&socStops==2);statistics();printf("%u %u %u\n",checks,statusAccesses,historyAccesses);return 0;}
 '''
 
 def extract(text,name):
@@ -243,8 +255,14 @@ def main():
     (OUT/'3ds/types.h').write_bytes(b'#pragma once\n')
     source=(ROS/'source/remote_play.c').read_text();draw=(ROS/'source/draw.c').read_text()
     actual=re.sub(r'^#include[^\n]*\n','',source,flags=re.M)
+    actual=actual.replace('static RemotePlayStatus status;','static RemotePlayStatus rawStatus;\n#define status (*statusAccess())')
+    actual=actual.replace('statusIncrement(&status.','statusIncrement(&rawStatus.')
+    actual=actual.replace('++*counter;','++*statusCounterAccess(counter);')
+    actual=actual.replace('buffers->encHistory','((EncSecond *)historyAccess(buffers->encHistory))')
+    actual=actual.replace('buffers->sndHistory','((SndSecond *)historyAccess(buffers->sndHistory))')
+    guards='\n#undef status\nstatic RemotePlayStatus *statusAccess(void){CHECK(settingsLock==0);++statusAccesses;return &rawStatus;}\nstatic u32 *statusCounterAccess(u32 *counter){CHECK(settingsLock==0&&(uintptr_t)counter>=(uintptr_t)&rawStatus&&(uintptr_t)counter+sizeof(*counter)<=(uintptr_t)&rawStatus+sizeof(rawStatus));++statusAccesses;return counter;}\nstatic void *historyAccess(void *history){CHECK(settingsLock==0);++historyAccesses;return history;}\n#define status rawStatus\n'
     selected='\n'.join(extract(draw,name) for name in ['Draw_IsFramebufferActive','Draw_SetupFramebuffer','Draw_RestoreFramebuffer','Draw_GetCurrentFramebufferAddress'])
-    (OUT/'fixture.c').write_bytes((PREFIX+selected+actual+SUFFIX).encode())
+    (OUT/'fixture.c').write_bytes((PREFIX+selected+actual+guards+SUFFIX).encode())
     compiler=os.environ.get('CC','cc')
     if not shutil.which(compiler) and os.name=='nt':compiler='C:/msys64/ucrt64/bin/gcc.exe'
     env=dict(os.environ);env['PATH']=str(Path(compiler).parent)+os.pathsep+env.get('PATH','')
@@ -253,7 +271,8 @@ def main():
     assert result.returncode==0,result.stdout+result.stderr
     result=subprocess.run([str(target)],env=env,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
-    report=dict(result='pass',checks=int(result.stdout.strip()),source_sha256=hashlib.sha256((ROS/'source/remote_play.c').read_bytes()).hexdigest(),draw_sha256=hashlib.sha256((ROS/'source/draw.c').read_bytes()).hexdigest(),hardware_tested=False,boundary='actual backend and draw lifecycle; OS threads/socket/copy engines mocked; fixed VA allocations belong to native test process only')
+    checks,status_accesses,history_accesses=map(int,result.stdout.split())
+    report=dict(result='pass',checks=checks,locked_status_accesses=status_accesses,locked_history_accesses=history_accesses,source_sha256=hashlib.sha256((ROS/'source/remote_play.c').read_bytes()).hexdigest(),draw_sha256=hashlib.sha256((ROS/'source/draw.c').read_bytes()).hexdigest(),hardware_tested=False,boundary='actual backend and draw lifecycle; instrumented status/history accesses require settings lock; OS threads/socket/copy engines mocked; fixed VA allocations belong to native test process only')
     if args.arm_cc:
         assert args.ctrulib,'--ctrulib is required with --arm-cc'
         report['arm']=arm_proof(args.arm_cc.resolve(),args.ctrulib.resolve(),env)
