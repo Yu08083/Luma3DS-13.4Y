@@ -32,6 +32,7 @@
 #include "menus/theme.h"
 #include "menus/online_id.h"
 #include "menus/online_bridge.h"
+#include "menus/streaming.h"
 #include "menu.h"
 #include "draw.h"
 #include "menus/process_list.h"
@@ -56,6 +57,7 @@ Menu rosalinaMenu = {
     "Rosalina menu",
     {
         { "Take screenshot", METHOD, .method = &RosalinaMenu_TakeScreenshot },
+        { "Wireless streaming...", METHOD, .method = &N3DSMenu_Streaming, .visibility = &menuCheckN3ds },
         { "Screen filters...", MENU, .menu = &screenFiltersMenu },
         { "Cheats...", METHOD, .method = &RosalinaMenu_Cheats },
         { "", METHOD, .method = PluginLoader__MenuCallback},

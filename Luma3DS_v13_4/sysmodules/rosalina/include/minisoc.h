@@ -21,12 +21,14 @@
 extern bool miniSocEnabled;
 
 Result miniSocInit(void);
+Result miniSocInitEx(bool lockState);
 
 void miniSocLockState(void);
 void miniSocUnlockState(bool force);
 
 Result miniSocExitDirect(void);
 Result miniSocExit(void);
+Result miniSocExitEx(bool lockState);
 
 s32 _net_convert_error(s32 sock_retval);
 

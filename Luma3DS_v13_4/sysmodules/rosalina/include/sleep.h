@@ -29,3 +29,4 @@
 void    Sleep__Init(void);
 void    Sleep__HandleNotification(u32 notifId);
 bool    Sleep__Status(void);
+bool    Sleep__IsSleeping(void);

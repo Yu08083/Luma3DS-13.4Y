@@ -268,7 +268,7 @@ int main(void)
         for(u32 i = 64; i < 68; ++i) commands[i] = 0x11223300 + i;
         char data[32];
         ssize_t result = _socuipc_cmd8(7, data, sizeof(data), 0, NULL, NULL);
-        assert(result == (mode == 0 ? 5 : mode == 1 ? -37 : -1));
+        assert(result == (mode == 0 ? 5 : mode == 1 ? -37 : mode == 2 ? -44 : -11));
         for(u32 i = 64; i < 68; ++i) assert(commands[i] == 0x11223300 + i);
     }
 #endif

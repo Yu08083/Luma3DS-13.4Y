@@ -45,6 +45,7 @@ static const u32 framebufferCacheSize = FB_BOTTOM_SIZE;
 static u16 g_menuBgColor;
 static u32 flushCount, flushBytes, lastOffset, sleepMs;
 static bool restoring;
+static bool framebufferActive;
 static bool checkRowCopy;
 static u32 rowCopies;
 #define __dmb() ((void)0)
@@ -93,6 +94,7 @@ int main(void)
     LCD_BOT_FILLCOLOR = 0x00112233;
     LCD_BOT_BRIGHTNESS = 0x100A080;
     Draw_SetupFramebuffer();
+    assert(Draw_IsFramebufferActive());
     for(u32 i = 0; i < FB_BOTTOM_SIZE; ++i) assert(backup[i] == (u8)i);
     assert(GPU_FB_BOTTOM_ADDR_1 == FB_BOTTOM_VRAM_PA && GPU_FB_BOTTOM_STRIDE == 480);
     flushCount = flushBytes = sleepMs = 0;
@@ -118,6 +120,7 @@ int main(void)
     memset(vram, 0xCC, sizeof(vram));
     restoring = true;
     Draw_RestoreFramebufferAnimated(true);
+    assert(!Draw_IsFramebufferActive());
     restoring = false;
     for(u32 i = 0; i < FB_BOTTOM_SIZE; ++i) assert(vram[i] == (u8)i);
     assert(GPU_FB_BOTTOM_ADDR_1 == 0x18000000 && GPU_FB_BOTTOM_ADDR_2 == 0x18100000);

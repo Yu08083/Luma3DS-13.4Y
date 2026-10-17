@@ -42,6 +42,7 @@
 #include "draw.h"
 #include "bootdiag.h"
 #include "shell.h"
+#include "remote_play.h"
 
 #include "task_runner.h"
 #include "plugin.h"
@@ -179,6 +180,10 @@ static void handlePreTermNotification(u32 notificationId)
 {
     (void)notificationId;
 
+    menuShouldExit = true;
+    preTerminationRequested = true;
+    RemotePlay_Stop();
+
 
     miniSocUnlockState(true);
 
@@ -203,8 +208,6 @@ static void handlePreTermNotification(u32 notificationId)
         svcCloseHandle(*qtmGetSessionHandle());
 
 
-    menuShouldExit = true;
-    preTerminationRequested = true;
     svcSignalEvent(preTerminationEvent);
     Draw_Unlock();
 }
@@ -260,6 +263,9 @@ int main(void)
 
     if (R_FAILED(ServiceManager_Run(services, notifications, NULL)))
         svcBreak(USERBREAK_PANIC);
+
+    while (R_FAILED(RemotePlay_Stop()))
+        svcSleepThread(10 * 1000 * 1000LL);
 
     TaskRunner_Terminate();
 

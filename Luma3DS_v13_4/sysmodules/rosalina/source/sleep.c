@@ -28,7 +28,7 @@
 #include "plugin/plgldr.h"
 #include "plugin/plgloader.h"
 
-static bool         g_isSleeping = false;
+static volatile bool g_isSleeping = false;
 static LightEvent   g_onWakeUpEvent;
 
 void    IR__HandleSleep(bool isSleeping);
@@ -73,4 +73,9 @@ bool    Sleep__Status(void)
         return true;
     }
     return false;
+}
+
+bool    Sleep__IsSleeping(void)
+{
+    return g_isSleeping;
 }

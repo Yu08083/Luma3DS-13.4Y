@@ -43,6 +43,7 @@ static u32 framebufferCacheSize;
 static void *framebufferCache;
 static RecursiveLock lock;
 static u32 gpuSavedFramebufferSelect;
+static bool framebufferActive;
 
 void Draw_Init(void)
 {
@@ -304,6 +305,7 @@ u32 Draw_GetFramebufferCacheSize(void)
 
 u32 Draw_SetupFramebuffer(void)
 {
+    framebufferActive = true;
     while((GPU_PSC0_CNT | GPU_PSC1_CNT | GPU_TRANSFER_CNT | GPU_CMDLIST_CNT) & 1);
     Draw_InvalidateFramebuffer();
     Draw_FlushFramebuffer();
@@ -341,6 +343,12 @@ void Draw_RestoreFramebuffer(void)
     __dmb();
     svcSleepThread(20 * 1000 * 1000LL);
     LCD_BOT_FILLCOLOR = gpuSavedFillColor;
+    framebufferActive = false;
+}
+
+bool Draw_IsFramebufferActive(void)
+{
+    return framebufferActive;
 }
 
 void Draw_RestoreFramebufferAnimated(bool animate)
@@ -381,7 +389,7 @@ void Draw_FlushFramebuffer(void)
 
 u32 Draw_GetCurrentFramebufferAddress(bool top, bool left)
 {
-    if(GPU_FB_BOTTOM_SEL & 1)
+    if((top ? GPU_FB_TOP_SEL : GPU_FB_BOTTOM_SEL) & 1)
     {
         if(left)
             return top ? GPU_FB_TOP_LEFT_ADDR_2 : GPU_FB_BOTTOM_ADDR_2;

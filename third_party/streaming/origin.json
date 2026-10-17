@@ -1,0 +1,135 @@
+{
+  "commit": "418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6",
+  "license": "GPL-3.0-or-later",
+  "files": [
+    {
+      "path": "sysmodules/rosalina/source/menus/streaming.c",
+      "bytes": 5351,
+      "sha256": "11cc6a016c363956439d4d7b220c9993d5f53666742fce8bff2fc1ea25800f08",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/menus/streaming.c"
+    },
+    {
+      "path": "sysmodules/rosalina/include/menus/streaming.h",
+      "bytes": 789,
+      "sha256": "b2f62c5d18d422deae748b6ddb149849a5ea1f6092025a42fab965f9eb183b55",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/menus/streaming.h"
+    },
+    {
+      "path": "sysmodules/rosalina/source/rp_jpeg.c",
+      "bytes": 15981,
+      "sha256": "8f8c21874681d36d5442898291de28b44bcb1e7c52557707f674d610223065bf",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/rp_jpeg.c"
+    },
+    {
+      "path": "sysmodules/rosalina/include/rp_jpeg.h",
+      "bytes": 1501,
+      "sha256": "ae2d5d599b8c562a53d1135386677a26cd80158ce2e7bdc210ef04e785d674a9",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/rp_jpeg.h"
+    },
+    {
+      "path": "sysmodules/rosalina/Makefile",
+      "bytes": 7188,
+      "sha256": "bad5962bbeb73f3541a60aa3956502f4d1516c385c2ef666efe3d4d924c98951",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/Makefile"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/LICENSE"
+    },
+    {
+      "path": "sysmodules/rosalina/source/remote_play.c",
+      "bytes": 29015,
+      "sha256": "ef1a6f0e479c97c9401bb7828c58398cbac87d52caa00657330856718a0c97bd",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/remote_play.c"
+    },
+    {
+      "path": "sysmodules/rosalina/include/remote_play.h",
+      "bytes": 1803,
+      "sha256": "2c98be242e99594595e20d09dc9bde4ab97bfcf25ab479439ce77283e96c7518",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/remote_play.h"
+    },
+    {
+      "path": "sysmodules/rosalina/include/MyThread.h",
+      "bytes": 1690,
+      "sha256": "fdf4d2354588be1da8a1f651ed836b9df87e09f3f0ea11993786b1456bab4465",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/MyThread.h"
+    },
+    {
+      "path": "sysmodules/rosalina/include/minisoc.h",
+      "bytes": 1672,
+      "sha256": "dec6d63fcd2d40515653a53b2c030fc8bd4ffdfe57ed1a39109adb91a3d6661b",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/minisoc.h"
+    },
+    {
+      "path": "sysmodules/rosalina/include/rp_kcopy.h",
+      "bytes": 998,
+      "sha256": "45f6c838ec5c0c2537be80e3eeba2851c0192cd1a877a2460ebe3094d8a64d18",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/rp_kcopy.h"
+    },
+    {
+      "path": "sysmodules/rosalina/include/sleep.h",
+      "bytes": 1342,
+      "sha256": "fe3635b3381935135e779f88131320e1e00afc46d9994016260e878eafba982d",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/sleep.h"
+    },
+    {
+      "path": "sysmodules/rosalina/include/sock_util.h",
+      "bytes": 1856,
+      "sha256": "a2a387b952cc9aa6a768dbd6b5b757db2cc6fd506e55dc1dfc61d43c6faa3554",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/include/sock_util.h"
+    },
+    {
+      "path": "sysmodules/rosalina/source/MyThread.c",
+      "bytes": 2340,
+      "sha256": "89113d1720c6dca269b28b0cea13cce51ca3a05dd68f2c54f5e65fd7790ab20a",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/MyThread.c"
+    },
+    {
+      "path": "sysmodules/rosalina/source/minisoc.c",
+      "bytes": 18426,
+      "sha256": "6f021db4177bac469b4f07cc62a640849df79ed980303e20c698071cadbea0a5",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/minisoc.c"
+    },
+    {
+      "path": "sysmodules/rosalina/source/rp_kcopy.c",
+      "bytes": 2848,
+      "sha256": "9826b7853893e93d4ab43958b3ee8229bba011a08548db1ebc9f097e98fc2f84",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/rp_kcopy.c"
+    },
+    {
+      "path": "sysmodules/rosalina/source/sleep.c",
+      "bytes": 2791,
+      "sha256": "fff8d5803c084600725ac8c47c8559e27aaebc5ef13797c0745bc9065645da65",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/sleep.c"
+    },
+    {
+      "path": "sysmodules/rosalina/source/sock_util.c",
+      "bytes": 9450,
+      "sha256": "d7e8032107c5630654b24c1f07e062c52e15afdaab9ae37c1c0ba8e9a3240ac8",
+      "url": "https://raw.githubusercontent.com/Tekito-256/Luma3DS-level256/418bc676e5c54c6e95744b98dc0f3d83aa0f6fd6/sysmodules/rosalina/source/sock_util.c"
+    }
+  ],
+  "repository": "https://github.com/Tekito-256/Luma3DS-level256",
+  "ported_files": [
+    "sysmodules/rosalina/source/remote_play.c",
+    "sysmodules/rosalina/source/rp_jpeg.c",
+    "sysmodules/rosalina/source/rp_kcopy.c",
+    "sysmodules/rosalina/include/remote_play.h",
+    "sysmodules/rosalina/include/rp_jpeg.h",
+    "sysmodules/rosalina/include/rp_kcopy.h"
+  ],
+  "changes": [
+    "Serialize lifecycle and preserve live thread stacks after failed joins",
+    "Use nonblocking sockets with bounded control parsing and partial heartbeat writes",
+    "Pause on sleep without unbounded wake wait",
+    "Use returned system allocation address and retain exact ownership during cleanup",
+    "Guard framebuffer copy with Draw lock and active-menu state; encode and send outside lock",
+    "Validate JPEG source extent and row copy dimensions and memory spans",
+    "Keep SOC shared references and NDM locking separate for streaming versus legacy users",
+    "Keep upstream legal notices and remove nonlegal explanatory comments"
+  ],
+  "hardware_tested": false,
+  "protocol": "NTR 84-byte TCP control on 8000; JPEG-over-UDP packets on 8001"
+}

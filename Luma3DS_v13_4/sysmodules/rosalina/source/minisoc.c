@@ -13,11 +13,14 @@
 #include "utils.h"
 
 s32 miniSocRefCount = 0;
+static s32 miniSocStateRefs;
+static LightLock miniSocLifecycle = (LightLock)1;
 static u32 socContextAddr = 0x08000000;
 static u32 socContextSize = 0x60000;
 static Handle miniSocHandle;
 static Handle miniSocMemHandle;
 static bool exclusiveStateEntered = false;
+static bool miniSocShutdownSent;
 
 bool miniSocEnabled = false;
 static volatile u32 miniSocHostId;
@@ -105,10 +108,20 @@ void miniSocUnlockState(bool force)
     }
 }
 
-Result miniSocInit(void)
+static Result miniSocInitUnlocked(bool lockState)
 {
-    if(AtomicPostIncrement(&miniSocRefCount))
+    if (miniSocRefCount > 0)
+    {
+        if (miniSocShutdownSent)
+            return -1;
+        miniSocRefCount++;
+        if (lockState)
+        {
+            miniSocStateRefs++;
+            miniSocLockState();
+        }
         return 0;
+    }
 
     u32 tmp = 0;
     Result ret = 0;
@@ -138,17 +151,19 @@ Result miniSocInit(void)
     ret = SOCU_Initialize(miniSocMemHandle, socContextSize);
     if(ret != 0) goto cleanup;
 
-    miniSocLockState();
+    if (lockState)
+        miniSocLockState();
 
     svcKernelSetState(0x10000, 0x10);
     miniSocRefreshHostId();
     miniSocEnabled = true;
+    miniSocRefCount = 1;
+    miniSocStateRefs = lockState ? 1 : 0;
+    miniSocShutdownSent = false;
 
     return 0;
 
 cleanup:
-    AtomicDecrement(&miniSocRefCount);
-
     if(miniSocMemHandle != 0)
     {
         svcCloseHandle(miniSocMemHandle);
@@ -168,36 +183,94 @@ cleanup:
     return ret;
 }
 
-Result miniSocExitDirect(void)
+static Result miniSocExitUnlocked(void)
 {
     Result ret = 0;
     u32 tmp;
-
-    svcCloseHandle(miniSocMemHandle);
-    miniSocMemHandle = 0;
-
-    ret = SOCU_Shutdown();
-
-    svcCloseHandle(miniSocHandle);
-    miniSocHandle = 0;
-
-    svcControlMemory(&tmp, socContextAddr, socContextAddr, socContextSize, MEMOP_FREE, MEMPERM_DONTCARE);
-    if(ret == 0)
+    if (!miniSocShutdownSent)
     {
-        miniSocUnlockState(false);
-
-        miniSocEnabled = false;
-        svcKernelSetState(0x10000, 0x10);
+        ret = SOCU_Shutdown();
+        if (R_FAILED(ret))
+            return ret;
+        miniSocShutdownSent = true;
     }
-    return ret;
+    if (miniSocMemHandle != 0)
+    {
+        ret = svcCloseHandle(miniSocMemHandle);
+        if (R_FAILED(ret))
+            return ret;
+        miniSocMemHandle = 0;
+    }
+    if (miniSocHandle != 0)
+    {
+        ret = svcCloseHandle(miniSocHandle);
+        if (R_FAILED(ret))
+            return ret;
+        miniSocHandle = 0;
+    }
+    ret = svcControlMemory(&tmp, socContextAddr, socContextAddr, socContextSize, MEMOP_FREE, MEMPERM_DONTCARE);
+    if (R_FAILED(ret))
+        return ret;
+    miniSocUnlockState(false);
+    miniSocEnabled = false;
+    miniSocShutdownSent = false;
+    svcKernelSetState(0x10000, 0x10);
+    return 0;
+}
+
+Result miniSocInitEx(bool lockState)
+{
+    LightLock_Lock(&miniSocLifecycle);
+    Result result = miniSocInitUnlocked(lockState);
+    LightLock_Unlock(&miniSocLifecycle);
+    return result;
+}
+
+Result miniSocInit(void)
+{
+    return miniSocInitEx(true);
+}
+
+Result miniSocExitDirect(void)
+{
+    LightLock_Lock(&miniSocLifecycle);
+    Result result = miniSocExitUnlocked();
+    if (R_SUCCEEDED(result))
+        miniSocRefCount = miniSocStateRefs = 0;
+    LightLock_Unlock(&miniSocLifecycle);
+    return result;
+}
+
+Result miniSocExitEx(bool lockState)
+{
+    LightLock_Lock(&miniSocLifecycle);
+    Result result = 0;
+    if (miniSocEnabled && miniSocRefCount > 0)
+    {
+        s32 oldRefs = miniSocRefCount;
+        s32 oldStateRefs = miniSocStateRefs;
+        miniSocRefCount--;
+        if (lockState && miniSocStateRefs > 0)
+            miniSocStateRefs--;
+        if (miniSocRefCount == 0)
+        {
+            result = miniSocExitUnlocked();
+            if (R_FAILED(result))
+            {
+                miniSocRefCount = oldRefs;
+                miniSocStateRefs = oldStateRefs;
+            }
+        }
+        else if (miniSocStateRefs == 0)
+            miniSocUnlockState(false);
+    }
+    LightLock_Unlock(&miniSocLifecycle);
+    return result;
 }
 
 Result miniSocExit(void)
 {
-    if(!miniSocEnabled || AtomicDecrement(&miniSocRefCount))
-        return 0;
-
-    return miniSocExitDirect();
+    return miniSocExitEx(true);
 }
 
 int socSocket(int domain, int type, int protocol)
@@ -369,7 +442,7 @@ int socAccept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
     }
 
     if(ret < 0)
-        return -1;
+        return ret;
 
     return ret;
 }
@@ -584,7 +657,7 @@ static ssize_t _socuipc_cmd7(int sockfd, void *buf, size_t len, int flags, struc
 
     if(ret < 0) {
         
-        return -1;
+        return ret;
     }
 
     if(src_addr != NULL) {
@@ -641,7 +714,7 @@ static ssize_t _socuipc_cmd8(int sockfd, void *buf, size_t len, int flags, struc
 
     if(ret < 0) {
         
-        return -1;
+        return ret;
     }
 
     if(src_addr != NULL) {
@@ -702,7 +775,7 @@ static ssize_t _socuipc_cmd9(int sockfd, const void *buf, size_t len, int flags,
 
     if(ret < 0) {
         
-        return -1;
+        return ret;
     }
 
     return ret;
@@ -756,7 +829,7 @@ static ssize_t _socuipc_cmda(int sockfd, const void *buf, size_t len, int flags,
 
     if(ret < 0) {
         
-        return -1;
+        return ret;
     }
 
     return ret;
