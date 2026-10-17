@@ -1,0 +1,14 @@
+3DS/
+.libctru/
+build.log
+__pycache__/
+tests/generated/
+**/build/
+**/out/
+*.firm
+*.elf
+*.cxi
+*.o
+*.d
+*.map
+Luma3DS_v13_4/sysmodules/sysmodules.bin

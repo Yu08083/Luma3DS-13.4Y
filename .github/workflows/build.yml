@@ -1,0 +1,76 @@
+name: Build Luma3DS v13.4Y
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 tests/verify.py
+      - run: python3 tests/navigation.py
+      - run: python3 tests/boot.py
+      - run: python3 tests/boot_menu.py
+      - run: python3 tests/controls.py
+      - run: python3 tests/display.py
+      - run: python3 tests/font.py
+      - run: python3 tests/ftp.py
+      - run: python3 tests/ftp_listener.py
+      - run: python3 tests/themes.py
+      - run: python3 tests/theme_menu.py
+      - run: python3 tests/online_id.py
+      - run: python3 tests/online_bridge.py
+      - run: python3 -m pip install unicorn==2.1.4
+      - run: python3 tests/plugin_payload.py
+      - run: python3 tests/plugin_format.py
+      - run: python3 tests/plugin_security.py
+      - run: python3 tests/plguds_ipc.py
+      - run: python3 tools/update_font.py && git diff --exit-code -- '**/japanese_font.h'
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm@sha256:15b79ce75822c289538d8153da5fa7aafe5e6adc32ad8a575a197beca0f0761b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install build tools
+        shell: bash
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends g++ python3-venv unzip
+          python3 -m venv /tmp/luma-python
+          /tmp/luma-python/bin/pip install 'git+https://github.com/TuxSH/firmtool.git@fdc7085c2394d87ce5dbdfecdf51423e1e7b00a1'
+          echo '/tmp/luma-python/bin' >> "$GITHUB_PATH"
+          git clone https://github.com/3DSGuy/Project_CTR.git /tmp/project-ctr
+          git -C /tmp/project-ctr checkout e8f5f529c54ff9b22a2491a480ffa69206bf7b19
+          make -C /tmp/project-ctr/makerom deps -j2
+          make -C /tmp/project-ctr/makerom -j2
+          install /tmp/project-ctr/makerom/bin/makerom /usr/local/bin/makerom
+      - name: Build Luma3DS v13.4Y
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          bash build.bat 1 || { tail -n 100 build.log; exit 1; }
+          python3 tools/check_firm.py 3DS
+          cd 3DS
+          sha256sum boot.firm 3ds/luma/13.4/boot.firm > SHA256SUMS.txt
+      - name: Firmware
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Luma3DS-v13.4Y
+          path: 3DS/
+          if-no-files-found: error
+      - name: Build log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore

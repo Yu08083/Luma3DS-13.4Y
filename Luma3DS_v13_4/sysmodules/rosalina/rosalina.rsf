@@ -1,0 +1,67 @@
+BasicInfo:
+  Title                   : rosalina
+  CompanyCode             : "00"
+  ProductCode             : lennybuilder
+  ContentType             : Application
+  Logo                    : None
+
+TitleInfo:
+  UniqueId                : 0x69
+  Category                : Base
+  Version                 : 2
+
+Option:
+  UseOnSD                 : false
+  FreeProductCode         : true
+  MediaFootPadding        : false
+  EnableCrypt             : false
+  EnableCompress          : true
+
+AccessControlInfo:
+  IdealProcessor                : 1
+  AffinityMask                  : 3
+
+  Priority                      : 25
+
+  DisableDebug                  : false
+  EnableForceDebug              : true
+  CanWriteSharedPage            : true
+  CanUsePrivilegedPriority      : true
+  CanUseNonAlphabetAndNumber    : false
+  PermitMainFunctionArgument    : false
+  CanShareDeviceMemory          : false
+  RunnableOnSleep               : true
+  SpecialMemoryArrange          : true
+  ResourceLimitCategory         : Other
+
+  CoreVersion                   : 2
+  DescVersion                   : 2
+
+  MemoryType                    : Base
+  HandleTableSize: 150
+
+  MemoryMapping:
+    - 0x1F000000 - 0x1F5FFFFF
+
+  IORegisterMapping:
+
+
+  SystemCallAccess:
+
+    Backdoor: 123
+    KernelSetState: 124
+
+  InterruptNumbers:
+    - 0x60
+
+  ServiceAccessControl:
+    - fs:USER
+  FileSystemAccess:
+    - DirectSdmc
+    - CtrNandRw
+    - CategorySystemApplication
+
+SystemControlInfo:
+  SaveDataSize: 0KB
+  RemasterVersion: 0
+  StackSize: 0x1000
