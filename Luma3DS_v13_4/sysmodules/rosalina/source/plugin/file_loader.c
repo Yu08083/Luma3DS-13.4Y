@@ -596,7 +596,7 @@ static bool CheckForDestructivePlugin(const u8 *file, const _3gx_Header *header,
     if(risk > 100) risk = 100;
     const char *warning = risk <= 20 ? "little dangerous" : risk <= 40 ? "moderately dangerous" : "very dangerous";
     char summary[64];
-    snprintf(summary, sizeof(summary), Lang_Translate("Risk : %u%% (%s)"), (unsigned)risk, Lang_Translate(warning));
+    sprintf(summary, Lang_Translate("Risk : %u%% (%s)"), (unsigned)risk, Lang_Translate(warning));
     bool details = false, result = false;
     menuEnter();
     while(!menuShouldExit)
