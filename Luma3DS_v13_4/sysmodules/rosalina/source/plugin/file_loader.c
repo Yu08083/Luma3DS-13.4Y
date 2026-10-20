@@ -9,7 +9,6 @@
 #include "utils.h"
 #include "menu.h"
 #include "draw.h"
-#include "sha256.h"
 #include "plugin/file_format.h"
 
 
@@ -405,137 +404,199 @@ static Result   FindPluginFile(u64 tid)
     return 0;
 }
 
-typedef struct SensitivePath
+typedef struct DestructiveKeyword
 {
     const char *text;
-} SensitivePath;
+    u32         weight;
+} DestructiveKeyword;
 
-static const SensitivePath g_sensitivePaths[] =
+static const DestructiveKeyword g_destructiveKeywords[] =
 {
-    { "boot9strap" },
-    { "boot.firm" },
+    { "boot9strap",   40 },
+    { "boot.firm",    40 },
+    { "private",      25 },
+    { "cias",         20 },
+    { "gm9",          20 },
+    { "fbi",          20 },
+    { "Nintendo 3DS", 15 },
+    { "DCIM",         10 },
+    { "JKSV",         10 },
+    { "Splashes",     10 },
 };
-#define SENSITIVE_PATH_COUNT (sizeof(g_sensitivePaths) / sizeof(g_sensitivePaths[0]))
+#define DESTRUCTIVE_KEYWORD_COUNT (sizeof(g_destructiveKeywords) / sizeof(g_destructiveKeywords[0]))
+#define APPROVED_PATH       "/luma/plugins/.approved3gx"
 
-static char lowerAscii(char value)
+static char lowerAscii(char c)
 {
-    return value >= 'A' && value <= 'Z' ? value - 'A' + 'a' : value;
+    return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
 }
 
-static bool MatchPathKeyword(const u8 *buffer, u32 length, u32 position, const char *keyword, u32 unit)
+static bool     MatchPathKeyword(const u8 *buf, u32 len, u32 pos, const char *keyword, u32 unit, bool last)
 {
-    for(u32 i = 0; keyword[i]; ++i, position += unit)
-        if(position > length || unit > length - position || lowerAscii(buffer[position]) != lowerAscii(keyword[i]) || (unit == 2 && buffer[position + 1]))
-            return false;
-    if(position == length) return true;
-    if(unit > length - position || (unit == 2 && buffer[position + 1])) return false;
-    return buffer[position] == '/' || buffer[position] == '\\' || buffer[position] == '"' || !buffer[position];
-}
-
-static void ScanForKeywords(const u8 *buffer, u32 length, u32 source, bool *found, u32 *offsets, u8 *units, u8 *sources)
-{
-    for(u32 position = 0; position < length; ++position)
+    for (u32 i = 0; keyword[i] != 0; ++i, pos += unit)
     {
-        if(buffer[position] != '/' && buffer[position] != ':' && buffer[position] != '\\') continue;
-        for(u32 unit = 1; unit <= 2; ++unit)
+        if (pos + unit > len || lowerAscii((char)buf[pos]) != lowerAscii(keyword[i]) || (unit == 2 && buf[pos + 1] != 0))
+            return false;
+    }
+
+    if (pos + unit > len)
+        return last;
+
+    return (buf[pos] == '/' || buf[pos] == '"' || buf[pos] == 0) && (unit == 1 || buf[pos + 1] == 0);
+}
+
+static void     ScanForKeywords(const u8 *buf, u32 len, u32 base, bool last, bool *found, u32 *offsets, u8 *units)
+{
+    for (u32 s = 0; s + 1 < len; ++s)
+    {
+        if (buf[s] != '/' && buf[s] != ':')
+            continue;
+
+        for (u32 unit = 1; unit <= 2; ++unit)
         {
-            if(unit > length - position || (unit == 2 && buffer[position + 1])) continue;
-            for(u32 i = 0; i < SENSITIVE_PATH_COUNT; ++i)
-                if(!found[i] && MatchPathKeyword(buffer, length, position + unit, g_sensitivePaths[i].text, unit))
+            if (unit == 2 && buf[s + 1] != 0)
+                continue;
+
+            for (u32 i = 0; i < DESTRUCTIVE_KEYWORD_COUNT; ++i)
+            {
+                if (!found[i] && MatchPathKeyword(buf, len, s + unit, g_destructiveKeywords[i].text, unit, last))
                 {
                     found[i] = true;
-                    offsets[i] = position + unit;
-                    units[i] = unit;
-                    sources[i] = source;
+                    offsets[i] = base + s + unit;
+                    units[i] = (u8)unit;
                 }
+            }
         }
     }
 }
 
 #define APPROVED_CACHE_SIZE 32
-static u8 approvedHashes[APPROVED_CACHE_SIZE][32];
-static u32 approvedCount;
 
-static bool IsHashApproved(const u8 hash[32])
+static u64      g_approvedHashes[APPROVED_CACHE_SIZE];
+static u32      g_approvedCount;
+static bool     g_approvedLoaded;
+
+static void     LoadApprovals(void)
 {
-    for(u32 i = 0; i < approvedCount; ++i)
-        if(!memcmp(approvedHashes[i], hash, 32)) return true;
+    IFile   f;
+    u64     total = 0;
+
+    g_approvedLoaded = true;
+
+    if (R_SUCCEEDED(IFile_Open(&f, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, APPROVED_PATH), FS_OPEN_READ)))
+    {
+        if (R_FAILED(IFile_Read(&f, &total, g_approvedHashes, sizeof(g_approvedHashes))))
+            total = 0;
+        IFile_Close(&f);
+    }
+
+    g_approvedCount = (u32)total / sizeof(u64);
+}
+
+static void     SaveApprovals(void)
+{
+    IFile   f;
+    u64     total;
+    u32     size = g_approvedCount * sizeof(u64);
+
+    if (R_SUCCEEDED(IFile_Open(&f, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, APPROVED_PATH), FS_OPEN_CREATE | FS_OPEN_WRITE)))
+    {
+        IFile_Write(&f, &total, g_approvedHashes, size, FS_WRITE_FLUSH);
+        IFile_SetSize(&f, size);
+        IFile_Close(&f);
+    }
+}
+
+static bool     IsHashApproved(u64 hash)
+{
+    if (!g_approvedLoaded)
+        LoadApprovals();
+
+    for (u32 i = 0; i < g_approvedCount; ++i)
+        if (g_approvedHashes[i] == hash)
+            return true;
+
     return false;
 }
 
-static void RememberApproval(const u8 hash[32])
+static void     RememberApproval(u64 hash)
 {
-    if(IsHashApproved(hash)) return;
-    if(approvedCount == APPROVED_CACHE_SIZE)
+    if (IsHashApproved(hash))
+        return;
+
+    if (g_approvedCount < APPROVED_CACHE_SIZE)
+        g_approvedHashes[g_approvedCount++] = hash;
+    else
     {
-        memmove(approvedHashes, approvedHashes + 1, sizeof(approvedHashes) - 32);
-        --approvedCount;
+        for (u32 i = 1; i < APPROVED_CACHE_SIZE; ++i)
+            g_approvedHashes[i - 1] = g_approvedHashes[i];
+
+        g_approvedHashes[APPROVED_CACHE_SIZE - 1] = hash;
     }
-    memcpy(approvedHashes[approvedCount++], hash, 32);
+
+    SaveApprovals();
 }
 
-static void DrawMatchDetails(const u8 *const buffers[2], const u32 lengths[2], const bool *found, const u32 *offsets, const u8 *units, const u8 *sources)
+static void DrawMatchDetails(const u8 *file, u32 fileSize, const bool *found, const u32 *offsets, const u8 *units)
 {
     u32 y = 30;
     Draw_DrawString(10, 10, COLOR_TITLE, Lang(STR_MATCHED_LOCATIONS));
-    for(u32 i = 0; i < SENSITIVE_PATH_COUNT; ++i)
+    for(u32 i = 0; i < DESTRUCTIVE_KEYWORD_COUNT; ++i)
     {
         if(!found[i]) continue;
-        u32 source = sources[i], back = 8 * units[i];
-        u32 start = offsets[i] > back ? offsets[i] - back : 0;
-        u32 count = (lengths[source] - start) / units[i];
+        u32 back = 8 * units[i];
+        u32 base = offsets[i] > back ? offsets[i] - back : 0;
+        u32 count = base < fileSize ? (fileSize - base) / units[i] : 0;
         if(count > 24) count = 24;
         char text[25];
         for(u32 j = 0; j < count; ++j)
         {
-            char value = buffers[source][start + j * units[i]];
+            char value = file[base + j * units[i]];
             text[j] = value >= 0x20 && value < 0x7F ? value : '.';
         }
         text[count] = 0;
-        y = Draw_DrawFormattedString(10, y, COLOR_WHITE, "%c:%08lx %-12s %s\n", source ? 'M' : 'F', offsets[i], g_sensitivePaths[i].text, text);
+        y = Draw_DrawFormattedString(10, y, COLOR_WHITE, "%08lx %-12s %s\n", offsets[i], g_destructiveKeywords[i].text, text);
     }
 }
 
-typedef struct {
-    bool found[SENSITIVE_PATH_COUNT];
-    u32 offsets[SENSITIVE_PATH_COUNT];
-    u8 units[SENSITIVE_PATH_COUNT], sources[SENSITIVE_PATH_COUNT];
-    u8 hash[32];
-} PluginScan;
-
-static void ScanPluginFile(PluginScan *scan, const u8 *file, u32 size)
+static bool CheckForDestructivePlugin(const u8 *file, const _3gx_Header *header, u32 fileSize)
 {
-    memset(scan, 0, sizeof(*scan));
-    Sha256 digest;
-    Sha256_Init(&digest);
-    Sha256_Update(&digest, file, size);
-    Sha256_Final(&digest, scan->hash);
-}
-
-static bool ConfirmSensitivePluginPaths(PluginScan *scan, const u8 *file, u32 fileSize, const u8 *image, u32 imageSize)
-{
-    bool *found = scan->found;
-    u32 *offsets = scan->offsets;
-    u8 *units = scan->units, *sources = scan->sources;
-    const u8 *buffers[2] = {file, image};
-    const u32 lengths[2] = {fileSize, imageSize};
-    u8 hash[32];
-    Sha256 digest;
-    Sha256_Init(&digest);
-    Sha256_Update(&digest, scan->hash, sizeof(scan->hash));
-    Sha256_Update(&digest, image, imageSize);
-    Sha256_Final(&digest, hash);
-    ScanForKeywords(image, imageSize, 1, found, offsets, units, sources);
-    u32 matches = 0;
+    if(!file || !header) return false;
+    const u32 ranges[3][2] =
+    {
+        {header->executable.codeOffset, header->executable.codeSize},
+        {header->executable.rodataOffset, header->executable.rodataSize},
+        {header->executable.dataOffset, header->executable.dataSize},
+    };
+    u64 hash = 0xCBF29CE484222325ULL;
+    bool found[DESTRUCTIVE_KEYWORD_COUNT] = {false};
+    u32 offsets[DESTRUCTIVE_KEYWORD_COUNT] = {0};
+    u8 units[DESTRUCTIVE_KEYWORD_COUNT] = {0};
+    for(u32 r = 0; r < 3; ++r)
+    {
+        u32 offset = ranges[r][0], length = ranges[r][1];
+        if(offset > fileSize || length > fileSize - offset) return false;
+        for(u32 i = 0; i < length; ++i)
+        {
+            hash ^= file[offset + i];
+            hash *= 0x100000001B3ULL;
+        }
+        ScanForKeywords(file + offset, length, offset, true, found, offsets, units);
+    }
+    u32 risk = 0;
     char matched[256] = {0};
-    for(u32 i = 0; i < SENSITIVE_PATH_COUNT; ++i)
+    for(u32 i = 0; i < DESTRUCTIVE_KEYWORD_COUNT; ++i)
         if(found[i])
         {
-            ++matches;
+            risk += g_destructiveKeywords[i].weight;
             if(matched[0]) strcat(matched, ", ");
-            strcat(matched, g_sensitivePaths[i].text);
+            strcat(matched, g_destructiveKeywords[i].text);
         }
-    if(!matches || IsHashApproved(hash)) return true;
+    if(!risk || IsHashApproved(hash)) return true;
+    if(risk > 100) risk = 100;
+    const char *warning = risk <= 20 ? "little dangerous" : risk <= 40 ? "moderately dangerous" : "very dangerous";
+    char summary[64];
+    snprintf(summary, sizeof(summary), Lang_Translate("Risk : %u%% (%s)"), (unsigned)risk, Lang_Translate(warning));
     bool details = false, result = false;
     menuEnter();
     while(!menuShouldExit)
@@ -544,14 +605,14 @@ static bool ConfirmSensitivePluginPaths(PluginScan *scan, const u8 *file, u32 fi
         Draw_ClearFramebuffer();
         if(details)
         {
-            DrawMatchDetails(buffers, lengths, found, offsets, units, sources);
+            DrawMatchDetails(file, fileSize, found, offsets, units);
             Draw_DrawString(10, 205, COLOR_WHITE, Lang(STR_X_BACK_TO_THE_WARNING));
         }
         else
         {
             Draw_DrawString(10, 10, COLOR_RED, Lang_Translate("--- WARNING ---"));
-            u32 y = Draw_DrawString(10, 30, COLOR_WHITE, Lang_Translate("Sensitive paths found in this plugin."));
-            y = Draw_DrawString(10, y + SPACING_Y, COLOR_WHITE, Lang_Translate("Path matches do not prove harmful behavior."));
+            u32 y = Draw_DrawString(10, 30, COLOR_WHITE, Lang_Translate("This 3gx may be a destructive plugin"));
+            y = Draw_DrawString(10, y + SPACING_Y, COLOR_WHITE, summary);
             y = Draw_DrawString(10, y + SPACING_Y, COLOR_WHITE, Lang_Translate("Matched keywords:"));
             y = Draw_DrawString(10, y + SPACING_Y, COLOR_YELLOW, matched);
             Draw_DrawString(10, y + SPACING_Y, COLOR_WHITE, Lang_Translate("X: show where found"));
@@ -562,8 +623,8 @@ static bool ConfirmSensitivePluginPaths(PluginScan *scan, const u8 *file, u32 fi
         Draw_Unlock();
         u32 keys = waitInput();
         if(menuShouldExit || (keys & KEY_B)) break;
+        if(keys & KEY_A) { result = true; break; }
         if(keys & KEY_X) details = !details;
-        else if(keys & KEY_A) { result = true; break; }
     }
     if(result) RememberApproval(hash);
     menuLeave();
@@ -627,7 +688,6 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
     static _3gx_Header parsedHeader;
     _3gx_Header *header = &parsedHeader;
     PluginFileLayout layout;
-    PluginScan scan;
     u8 *snapshot = NULL;
     PluginLoaderContext *ctx = &PluginLoaderCtx;
     PluginHeader        *pluginHeader = &ctx->header;
@@ -728,20 +788,19 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
         else
         {
             memcpy(header, snapshot, sizeof(*header));
-            ScanPluginFile(&scan, snapshot, fileSize);
         }
     }
     if(!res) res = Read_3gx_ParseHeader(snapshot, header);
     if(!res && R_FAILED(res = Read_3gx_EmbeddedPayloads(snapshot, header))) ctx->error.message = "Invalid save/load payloads.";
     if(!res) ctx->exeLoadChecksum = header->infos.exeLoadChecksum;
     if(!res) res = CheckPluginCompatibility(header, (u32)tid);
-    if(!res && R_FAILED(res = Read_3gx_LoadSegments(snapshot, header, snapshot + header->executable.codeOffset)))
-        ctx->error.message = "Unsupported loading payload or corrupted plugin.";
-    if(!res && !ConfirmSensitivePluginPaths(&scan, snapshot, fileSize, snapshot + header->executable.codeOffset, layout.imageSize))
+    if(!res && !CheckForDestructivePlugin(snapshot, &fileHeader, (u32)fileSize))
     {
         ctx->error.message = NULL;
         res = -1;
     }
+    if(!res && R_FAILED(res = Read_3gx_LoadSegments(snapshot, header, snapshot + header->executable.codeOffset)))
+        ctx->error.message = "Unsupported loading payload or corrupted plugin.";
     if(R_FAILED(res))
     {
         ctx->error.code = res;

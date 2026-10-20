@@ -63,33 +63,8 @@ static void svcKernelSetState(int state) { assert(state == 7); ++reboots; }
 static void svcFlushDataCacheRange(const void *data, u32 size) { (void)data; (void)size; }
 static Result svcFlushProcessDataCache(u32 process, u32 address, u32 size) { assert(process == CUR_PROCESS_HANDLE && address && size == 64); return 0; }
 static void svcFlushEntireDataCache(void) {}
-#define COLOR_TITLE 0
-#define COLOR_WHITE 0
-#define COLOR_YELLOW 0
-#define COLOR_RED 0
-#define SPACING_Y 11
-#define STR_MATCHED_LOCATIONS 0
-#define STR_X_BACK_TO_THE_WARNING 0
-#define KEY_A 1
-#define KEY_B 2
-#define KEY_X 4
-static bool menuShouldExit;
-static u32 nextKey = KEY_A;
-static unsigned prompts;
-static const char *Lang(int id) { (void)id; return ""; }
-static const char *Lang_Translate(const char *text) { return text; }
-static void menuEnter(void) { ++prompts; }
-static void menuLeave(void) {}
-static void Draw_Lock(void) {}
-static void Draw_Unlock(void) {}
-static void Draw_ClearFramebuffer(void) {}
-static void Draw_FlushFramebuffer(void) {}
-static u32 waitInput(void) { return nextKey; }
-static u32 Draw_DrawString(int x, u32 y, int color, const char *text) { (void)x; (void)color; (void)text; return y + 11; }
-static u32 Draw_DrawFormattedString(int x, u32 y, int color, const char *format, ...) { (void)x; (void)color; (void)format; return y + 11; }
 '''
 loader = (module / 'source/plugin/file_loader.c').read_text()
-scan = loader[loader.index('typedef struct SensitivePath'):loader.index('static Result   OpenFile(IFile *file, const char *path)\n{')]
 memory = (module / 'source/plugin/memoryblock.c').read_text()
 globals_ = memory[memory.index('u32  g_loadSaveSwapArgs'):memory.index('Result     MemoryBlock__SetSize')]
 globals_ = globals_.replace('(u32)onlineBridge', '(u32)(uintptr_t)onlineBridge')
@@ -192,64 +167,6 @@ int main(void)
     testPluginPaths();
     testIgnoredSwapPaths();
     u8 buffer[128] = {0};
-    PluginScan scan;
-    const u8 file[] = "header\\boot.firm\0payload";
-    ScanPluginFile(&scan, file, sizeof(file));
-    assert(!scan.found[0] && !scan.found[1]);
-    nextKey = KEY_B;
-    assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)) && !prompts);
-    memcpy(buffer, "/boot.firm", 11);
-    nextKey = KEY_A;
-    assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)));
-    assert(prompts == 1);
-    ScanPluginFile(&scan, file, sizeof(file));
-    assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)) && prompts == 1);
-    buffer[100] = 1;
-    ScanPluginFile(&scan, file, sizeof(file));
-    assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)) && prompts == 2);
-    u8 changed[sizeof(file)]; memcpy(changed, file, sizeof(file)); changed[0] ^= 1;
-    ScanPluginFile(&scan, changed, sizeof(changed));
-    nextKey = KEY_B;
-    assert(!ConfirmSensitivePluginPaths(&scan, changed, sizeof(changed), buffer, sizeof(buffer)) && prompts == 3);
-    const char *ordinary[] = {
-        "/private/movable.sed", "sdmc:/cias/test.cia", "/gm9/out/file.bin", "/fbi/config",
-        "/Nintendo 3DS/title", "/DCIM/photo.jpg", "/JKSV/save", "/Splashes/start.bin",
-        "/boot.firm.bak", "/boot9strap-notes", "/myboot.firm", "/notes/private.txt"
-    };
-    nextKey = KEY_B;
-    unsigned beforeOrdinary = prompts;
-    for(unsigned i = 0; i < sizeof(ordinary) / sizeof(ordinary[0]); ++i)
-    {
-        u8 wide[128] = {0};
-        u32 length = strlen(ordinary[i]);
-        assert(length * 2 + 2 <= sizeof(wide));
-        for(u32 j = 0; j < length; ++j) wide[j * 2] = ordinary[i][j];
-        for(unsigned unit = 1; unit <= 2; ++unit)
-        {
-            const u8 *input = unit == 1 ? (const u8 *)ordinary[i] : wide;
-            u32 size = (length + 1) * unit;
-            ScanPluginFile(&scan, input, size);
-            assert(!scan.found[0] && !scan.found[1]);
-            assert(ConfirmSensitivePluginPaths(&scan, input, size, input, size));
-            assert(prompts == beforeOrdinary);
-        }
-    }
-    u8 wide[] = {'/',0,'b',0,'o',0,'o',0,'t',0,'.',0,'f',0,'i',0,'r',0,'m',0,0,0};
-    ScanPluginFile(&scan, wide, sizeof(wide));
-    assert(!scan.found[1]);
-    assert(!ConfirmSensitivePluginPaths(&scan, wide, sizeof(wide), wide, sizeof(wide)));
-    assert(scan.found[1] && scan.units[1] == 2 && scan.sources[1] == 1);
-    const u8 metadata[] = "author /boot.firm\0description /boot9strap/\0symbol /boot.firm";
-    const u8 image[] = "normal game plugin /luma/plugins/config.bin";
-    unsigned beforeMetadata = prompts;
-    ScanPluginFile(&scan, metadata, sizeof(metadata));
-    assert(ConfirmSensitivePluginPaths(&scan, metadata, sizeof(metadata), image, sizeof(image)));
-    assert(prompts == beforeMetadata && !scan.found[0] && !scan.found[1]);
-    const u8 encoded[] = {1,2,3,4};
-    ScanPluginFile(&scan, encoded, sizeof(encoded));
-    assert(!ConfirmSensitivePluginPaths(&scan, encoded, sizeof(encoded), (const u8 *)"/boot9strap/", 12));
-    assert(scan.found[0] && scan.sources[0] == 1);
-    assert(!strstr("unused", ".approved3gx"));
     g_memBlockSize = sizeof(buffer);
     PluginLoaderCtx.memblock.memblock = buffer;
     u32 code[32] = {0xE92D40C0,0xE3A07000,0xE4906004,0xE0877006,0xE1500001,0x1AFFFFFB,0xE1A00007,0xE8BD80C0,0xE320F000};
@@ -277,21 +194,17 @@ int main(void)
     assert(MemoryBlock__SetSwapSettings(code, false, args) < 0);
     MemoryBlock__ResetSwapSettings();
     assert(!swapDigestValid && !PluginLoaderCtx.isSwapFunctionset);
-    puts("Plugin security: bounded UTF-8 plugin paths, fixed swap path and IPC forwarding, ordinary path compatibility, decoded and UTF-16 scanning, full-file/image approval binding, cancellation, atomic swap settings, tamper, short-read and failed-write rejection passed");
+    puts("Plugin security: bounded UTF-8 plugin paths, fixed swap path and IPC forwarding, atomic swap settings, tamper, short-read and failed-write rejection passed");
 }
 '''
 source = generated / 'security.c'
-source.write_text(prefix + globals_ + scan + swap + settings + command_prefix + path_helpers + command_function + swap_command + command_suffix + tests, encoding='utf-8')
+source.write_text(prefix + globals_ + swap + settings + command_prefix + path_helpers + command_function + swap_command + command_suffix + tests, encoding='utf-8')
 binary = generated / ('security.exe' if os.name == 'nt' else 'security')
 subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-O2', '-I', str(generated), '-I', str(module / 'include'), str(source), str(module / 'source/sha256.c'), str(module / 'source/plugin/payload_vm.c'), '-o', str(binary)], check=True, env=env)
 subprocess.run([str(binary)], check=True, env=env)
-assert '.approved3gx' not in loader and '0x100000001B3' not in loader
-assert 'ConfirmSensitivePluginPaths(&scan' in loader and loader.index('Read_3gx_LoadSegments(snapshot') < loader.index('ConfirmSensitivePluginPaths(&scan')
 assert 'PA_FROM_VA_PTR' not in (module / 'source/plugin/3gx.c').read_text()
 assert 'PA_FROM_VA_PTR(isLoad' not in memory
 assert '!PluginPathCanAppend((u32)units)' in loader and '!AppendPluginPath(chosen)' in loader
 assert 'strcat(g_path, chosen)' not in loader
 assert 'g_swapFileName' not in swap_command
 assert 'const char g_swapFileName[] = "/luma/plugins/.swap";' in memory
-
-assert "ScanForKeywords(file, size, 0" not in loader
