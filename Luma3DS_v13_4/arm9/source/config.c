@@ -826,6 +826,16 @@ void writeConfig(bool isConfigOptions)
         error("Error writing the configuration file");
 }
 
+bool configSetRosalinaMenuCombo(u32 combo)
+{
+    if(!combo || (combo&~0xCFFFu) || (combo&0x30)==0x30 || (combo&0xC0)==0xC0)return false;
+    u32 previous=configData.rosalinaMenuCombo;
+    configData.rosalinaMenuCombo=combo;
+    if(writeLumaIniConfig())return true;
+    configData.rosalinaMenuCombo=previous;
+    return false;
+}
+
 void configMenu(bool oldPinStatus, u32 oldPinMode)
 {
     BootLanguage_Load();

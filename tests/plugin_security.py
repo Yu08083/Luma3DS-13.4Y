@@ -195,12 +195,16 @@ int main(void)
     PluginScan scan;
     const u8 file[] = "header\\boot.firm\0payload";
     ScanPluginFile(&scan, file, sizeof(file));
-    assert(scan.found[1] && scan.offsets[1] == 7);
+    assert(!scan.found[0] && !scan.found[1]);
+    nextKey = KEY_B;
+    assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)) && !prompts);
+    memcpy(buffer, "/boot.firm", 11);
+    nextKey = KEY_A;
     assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)));
     assert(prompts == 1);
     ScanPluginFile(&scan, file, sizeof(file));
     assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)) && prompts == 1);
-    buffer[0] = 1;
+    buffer[100] = 1;
     ScanPluginFile(&scan, file, sizeof(file));
     assert(ConfirmSensitivePluginPaths(&scan, file, sizeof(file), buffer, sizeof(buffer)) && prompts == 2);
     u8 changed[sizeof(file)]; memcpy(changed, file, sizeof(file)); changed[0] ^= 1;
@@ -232,7 +236,15 @@ int main(void)
     }
     u8 wide[] = {'/',0,'b',0,'o',0,'o',0,'t',0,'.',0,'f',0,'i',0,'r',0,'m',0,0,0};
     ScanPluginFile(&scan, wide, sizeof(wide));
-    assert(scan.found[1] && scan.units[1] == 2);
+    assert(!scan.found[1]);
+    assert(!ConfirmSensitivePluginPaths(&scan, wide, sizeof(wide), wide, sizeof(wide)));
+    assert(scan.found[1] && scan.units[1] == 2 && scan.sources[1] == 1);
+    const u8 metadata[] = "author /boot.firm\0description /boot9strap/\0symbol /boot.firm";
+    const u8 image[] = "normal game plugin /luma/plugins/config.bin";
+    unsigned beforeMetadata = prompts;
+    ScanPluginFile(&scan, metadata, sizeof(metadata));
+    assert(ConfirmSensitivePluginPaths(&scan, metadata, sizeof(metadata), image, sizeof(image)));
+    assert(prompts == beforeMetadata && !scan.found[0] && !scan.found[1]);
     const u8 encoded[] = {1,2,3,4};
     ScanPluginFile(&scan, encoded, sizeof(encoded));
     assert(!ConfirmSensitivePluginPaths(&scan, encoded, sizeof(encoded), (const u8 *)"/boot9strap/", 12));
@@ -281,3 +293,5 @@ assert '!PluginPathCanAppend((u32)units)' in loader and '!AppendPluginPath(chose
 assert 'strcat(g_path, chosen)' not in loader
 assert 'g_swapFileName' not in swap_command
 assert 'const char g_swapFileName[] = "/luma/plugins/.swap";' in memory
+
+assert "ScanForKeywords(file, size, 0" not in loader

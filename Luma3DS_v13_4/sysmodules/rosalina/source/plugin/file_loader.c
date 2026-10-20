@@ -510,7 +510,6 @@ static void ScanPluginFile(PluginScan *scan, const u8 *file, u32 size)
     Sha256_Init(&digest);
     Sha256_Update(&digest, file, size);
     Sha256_Final(&digest, scan->hash);
-    ScanForKeywords(file, size, 0, scan->found, scan->offsets, scan->units, scan->sources);
 }
 
 static bool ConfirmSensitivePluginPaths(PluginScan *scan, const u8 *file, u32 fileSize, const u8 *image, u32 imageSize)

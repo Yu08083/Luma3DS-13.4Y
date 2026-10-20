@@ -82,3 +82,5 @@ extern CfgData configData;
 bool readConfig(void);
 void writeConfig(bool isConfigOptions);
 void configMenu(bool oldPinStatus, u32 oldPinMode);
+
+bool configSetRosalinaMenuCombo(u32 combo);

@@ -25,6 +25,8 @@
 */
 
 #include "fs.h"
+#include "boot_rosalina.h"
+#include "boot_language.h"
 #include "memory.h"
 #include "fmt.h"
 #include "crypto.h"
@@ -279,95 +281,62 @@ bool findPayload(char *path, u32 pressed)
 bool payloadMenu(char *path, bool *hasDisplayedMenu)
 {
     DIR dir;
-
-    *hasDisplayedMenu = false;
-    if(f_opendir(&dir, "payloads") != FR_OK) return false;
-
     FILINFO info;
-    u32 payloadNum = 0;
+    u32 payloadNum=0;
     char payloadList[20][49];
-
-    while(f_readdir(&dir, &info) == FR_OK && info.fname[0] != 0 && payloadNum < 20)
+    if(f_opendir(&dir,"payloads")==FR_OK)
     {
-        if(info.fname[0] == '.') continue;
-
-        u32 nameLength = strlen(info.fname);
-
-        if(nameLength < 6 || nameLength > 52) continue;
-
-        nameLength -= 5;
-
-        if(memcmp(info.fname + nameLength, ".firm", 5) != 0) continue;
-
-        memcpy(payloadList[payloadNum], info.fname, nameLength);
-        payloadList[payloadNum][nameLength] = 0;
-        payloadNum++;
-    }
-
-    if(f_closedir(&dir) != FR_OK || !payloadNum) return false;
-
-    u32 pressed = 0,
-        selectedPayload = 0;
-
-    if(payloadNum != 1)
-    {
-        initScreens();
-        *hasDisplayedMenu = true;
-
-        drawString(true, 10, 10, COLOR_TITLE, "Luma3DS chainloader");
-        drawString(true, 10, 10 + SPACING_Y, COLOR_TITLE, "Press A to select, START to quit");
-
-        for(u32 i = 0, posY = 10 + 3 * SPACING_Y, color = COLOR_RED; i < payloadNum; i++, posY += SPACING_Y)
+        while(f_readdir(&dir,&info)==FR_OK && info.fname[0] && payloadNum<20)
         {
-            drawString(true, 10, posY, color, payloadList[i]);
-            if(color == COLOR_RED) color = COLOR_WHITE;
+            if(info.fname[0]=='.')continue;
+            u32 length=strlen(info.fname);
+            if(length<6 || length>52 || memcmp(info.fname+length-5,".firm",5))continue;
+            memcpy(payloadList[payloadNum],info.fname,length-5);
+            payloadList[payloadNum++][length-5]=0;
         }
-
-        while(pressed != BUTTON_A && pressed != BUTTON_START)
-        {
-            do
-            {
-                pressed = waitInput(true) & MENU_BUTTONS;
-            }
-            while(!pressed);
-
-            u32 oldSelectedPayload = selectedPayload;
-
-            switch(pressed)
-            {
-                case BUTTON_UP:
-                    selectedPayload = !selectedPayload ? payloadNum - 1 : selectedPayload - 1;
-                    break;
-                case BUTTON_DOWN:
-                    selectedPayload = selectedPayload == payloadNum - 1 ? 0 : selectedPayload + 1;
-                    break;
-                case BUTTON_LEFT:
-                    selectedPayload = 0;
-                    break;
-                case BUTTON_RIGHT:
-                    selectedPayload = payloadNum - 1;
-                    break;
-                default:
-                    continue;
-            }
-
-            if(oldSelectedPayload == selectedPayload) continue;
-
-            drawString(true, 10, 10 + (3 + oldSelectedPayload) * SPACING_Y, COLOR_WHITE, payloadList[oldSelectedPayload]);
-            drawString(true, 10, 10 + (3 + selectedPayload) * SPACING_Y, COLOR_RED, payloadList[selectedPayload]);
-        }
+        if(f_closedir(&dir)!=FR_OK)payloadNum=0;
     }
-
-    if(pressed != BUTTON_START)
+    u32 selected=0, first=0;
+    bool redraw=true;
+    initScreens();
+    *hasDisplayedMenu=true;
+    while(true)
     {
-        sprintf(path, "payloads/%s.firm", payloadList[selectedPayload]);
-
-        return true;
+        if(redraw)
+        {
+            clearScreens(false);
+            drawString(true,10,10,COLOR_TITLE,"Luma3DS chainloader");
+            drawString(true,10,10+SPACING_Y,COLOR_TITLE,BootLanguage_IsJapanese()?"A: 選択   START / B: 起動へ戻る":"A: Select    START / B: Continue boot");
+            for(u32 row=0;row<15 && first+row<=payloadNum;row++)
+            {
+                u32 index=first+row;
+                const char *label=index==payloadNum?(BootLanguage_IsJapanese()?"Rosalinaを開くボタン...":"Rosalina menu buttons..."):payloadList[index];
+                drawString(true,10,10+(3+row)*SPACING_Y,index==selected?COLOR_RED:COLOR_WHITE,label);
+            }
+            redraw=false;
+        }
+        u32 pressed=waitInput(true);
+        if(pressed&(BUTTON_START|BUTTON_B))break;
+        if(pressed&BUTTON_A)
+        {
+            if(selected<payloadNum)
+            {
+                sprintf(path,"payloads/%s.firm",payloadList[selected]);
+                return true;
+            }
+            BootRosalina_Configure();redraw=true;continue;
+        }
+        if(pressed&BUTTON_UP)selected=selected?selected-1:payloadNum;
+        else if(pressed&BUTTON_DOWN)selected=selected<payloadNum?selected+1:0;
+        else if(pressed&BUTTON_LEFT)selected=0;
+        else if(pressed&BUTTON_RIGHT)selected=payloadNum;
+        else continue;
+        if(selected<first)first=selected;
+        if(selected>=first+15)first=selected-14;
+        redraw=true;
     }
-
-    while(HID_PAD & MENU_BUTTONS);
+    while(HID_PAD&PIN_BUTTONS);
     wait(2000ULL);
-
     return false;
 }
 
