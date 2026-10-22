@@ -1,6 +1,6 @@
 # Luma3DS v13.4Y
 
-Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。ver.y08。更新日: 2026-10-20。
+Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。ver.y09。更新日: 2026-10-23。
 
 ## 導入
 

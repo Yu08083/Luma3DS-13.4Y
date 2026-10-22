@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include "csvc.h"
+#include "dsp_audio.h"
 #include "draw.h"
 #include "fmt.h"
 #include "ifile.h"
@@ -77,6 +78,22 @@ extern bool preTerminationRequested;
 #define ENCODER_STACK_SIZE 0x3000
 #define SENDER_STACK_SIZE  0x2000
 
+#define AUDIO_THREAD_PRIO  0x2E
+#define AUDIO_STACK_SIZE   0x2000
+#define AUDIO_HELLO_MAGIC  "L2AH"
+#define AUDIO_MAGIC        "L2AU"
+#define AUDIO_VERSION      1
+#define AUDIO_FORMAT_S16_STEREO 0
+#define AUDIO_HEADER_SIZE  12
+#define AUDIO_FRAMES_PER_PACKET 2
+#define AUDIO_PACKET_SIZE  (AUDIO_HEADER_SIZE + AUDIO_FRAMES_PER_PACKET * DSPAUDIO_FRAME_BYTES)
+#define AUDIO_POLL_NS      (1000 * 1000LL)
+#define AUDIO_HELLO_CHECK_US 100000
+#define AUDIO_PLAYER_TIMEOUT_US 5000000
+#define AUDIO_FLUSH_US     20000
+#define AUDIO_IDLE_NS      (100 * 1000 * 1000LL)
+#define AUDIO_MAX_MISSED_RUN 8
+
 #define VRAM_PA            0x18000000
 #define VRAM_END           0x18600000
 #define VRAM_VA            0x1F000000
@@ -101,12 +118,12 @@ typedef struct SavedViewer
 
 #define KERNPA2VA(a)       ((a) + (GET_VERSION_MINOR(osGetKernelVersion()) < 44 ? 0xD0000000 : 0xC0000000))
 
-static MyThread controlThread, encoderThread, senderThread;
+static MyThread controlThread, encoderThread, senderThread, audioThread;
 
 static volatile bool running, stopRequested;
 static volatile bool linkDown, checkLinkNow;
 static bool socInitialized;
-static int listenSock = -1, videoSock = -1;
+static int listenSock = -1, videoSock = -1, audioSock = -1;
 
 static LightLock settingsLock = (LightLock)1;
 static LightLock lifecycleLock = (LightLock)1;
@@ -571,6 +588,21 @@ typedef struct SndSecond
     u16 framesTop, framesBottom;
 } SndSecond;
 
+typedef struct AudioState
+{
+    DspAudioReader reader;
+    u32 playerIp;
+    u16 playerPort;
+    u64 lastHelloTick;
+    u64 lastHelloCheckTick;
+    bool haveIndex;
+    u32 lastIndex;
+    u32 packetFirst;
+    u32 pending;
+    u64 pendingTick;
+    u8 CTR_ALIGN(4) packet[AUDIO_PACKET_SIZE];
+} AudioState;
+
 typedef struct Buffers
 {
     JpegSlot slots[JPEG_SLOTS];
@@ -578,8 +610,10 @@ typedef struct Buffers
     u8 CTR_ALIGN(8) controlStack[CONTROL_STACK_SIZE];
     u8 CTR_ALIGN(8) encoderStack[ENCODER_STACK_SIZE];
     u8 CTR_ALIGN(8) senderStack[SENDER_STACK_SIZE];
+    u8 CTR_ALIGN(8) audioStack[AUDIO_STACK_SIZE];
     EncoderState encoder;
     SenderState sender;
+    AudioState audio;
     u64 startTick;
     EncSecond encHistory[HISTORY_SECONDS];
     SndSecond sndHistory[HISTORY_SECONDS];
@@ -592,6 +626,7 @@ static u32 allocationAddr;
 static bool allocationOwned;
 #define enc (buffers->encoder)
 #define snd (buffers->sender)
+#define aud (buffers->audio)
 
 static u32 secondOf(u64 tick)
 {
@@ -1083,6 +1118,216 @@ static void senderThreadMain(void)
     }
 }
 
+static int openAudioSocket(void)
+{
+    u32 ip = socGethostid();
+    if (ip == 0 || ip == (u32)-1)
+        return -1;
+
+    int sock = openSocket(SOCK_DGRAM);
+    if (sock < 0)
+        return sock;
+
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(REMOTEPLAY_AUDIO_PORT),
+        .sin_addr.s_addr = ip,
+    };
+    if (socBind(sock, (struct sockaddr *)&addr, sizeof(addr)) != 0)
+    {
+        closeSocket(&sock);
+        return -1;
+    }
+    return sock;
+}
+
+static void forgetPlayer(void)
+{
+    aud.playerIp = 0;
+    aud.pending = 0;
+    LightLock_Lock(&settingsLock);
+    status.audioPlayerIp = 0;
+    LightLock_Unlock(&settingsLock);
+}
+
+static void startPlayer(u32 ip, u16 port)
+{
+    aud.playerIp = ip;
+    aud.playerPort = port;
+    aud.pending = 0;
+    aud.haveIndex = false;
+    DspAudio_ReaderInit(&aud.reader);
+    LightLock_Lock(&settingsLock);
+    status.audioPlayerIp = ip;
+    status.audioFrames = status.audioMissed = 0;
+    LightLock_Unlock(&settingsLock);
+}
+
+static void checkHello(u64 now)
+{
+    for (u32 attempt = 0; attempt < 8; attempt++)
+    {
+        struct pollfd fd = { .fd = audioSock, .events = POLLIN };
+        int res = socPoll(&fd, 1, 0);
+        if (res <= 0)
+            return;
+        if (fd.revents & (POLLERR | POLLHUP | POLLNVAL))
+        {
+            closeSocket(&audioSock);
+            return;
+        }
+        if (!(fd.revents & POLLIN))
+            return;
+
+        u8 buf[16];
+        struct sockaddr_in from;
+        socklen_t fromLen = sizeof(from);
+        int n = socRecvfrom(audioSock, buf, sizeof(buf), 0, (struct sockaddr *)&from, &fromLen);
+        if (n < 0)
+        {
+            if (transient(n))
+                return;
+            closeSocket(&audioSock);
+            return;
+        }
+        if (fromLen < sizeof(from) || from.sin_family != AF_INET || !from.sin_port ||
+            !from.sin_addr.s_addr || n < 4 || memcmp(buf, AUDIO_HELLO_MAGIC, 4) != 0)
+            continue;
+
+        if (aud.playerIp != from.sin_addr.s_addr || aud.playerPort != from.sin_port)
+            startPlayer(from.sin_addr.s_addr, from.sin_port);
+        aud.lastHelloTick = now;
+    }
+}
+
+static void putLe16(u8 *p, u16 v) { p[0] = v; p[1] = v >> 8; }
+static void putLe32(u8 *p, u32 v) { putLe16(p, v); putLe16(p + 2, v >> 16); }
+
+static void sendAudio(void)
+{
+    if (aud.pending == 0)
+        return;
+
+    u8 *p = aud.packet;
+    memcpy(p, AUDIO_MAGIC, 4);
+    p[4] = AUDIO_VERSION;
+    p[5] = AUDIO_FORMAT_S16_STEREO;
+    putLe16(p + 6, (u16)aud.pending);
+    putLe32(p + 8, aud.packetFirst);
+
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = aud.playerPort,
+        .sin_addr.s_addr = aud.playerIp,
+    };
+    u32 size = AUDIO_HEADER_SIZE + aud.pending * DSPAUDIO_FRAME_BYTES;
+    int res = socSendto(audioSock, p, size, 0,
+                        (struct sockaddr *)&addr, sizeof(addr));
+    if (res != (int)size)
+    {
+        statusIncrement(&status.audioSendErrors);
+        if (!transient(res))
+        {
+            checkLinkNow = true;
+            closeSocket(&audioSock);
+        }
+    }
+    else
+    {
+        LightLock_Lock(&settingsLock);
+        status.audioFrames += aud.pending;
+        LightLock_Unlock(&settingsLock);
+    }
+
+    aud.pending = 0;
+}
+
+static void addFrame(const DspAudioBlock *b, u64 now)
+{
+    u32 index = b->frame;
+    if (aud.haveIndex)
+    {
+        u16 delta = b->frame - (u16)aud.lastIndex;
+        index = aud.lastIndex + delta;
+        if (delta == 0 || delta >= 0x10000u - AUDIO_MAX_MISSED_RUN)
+            return;
+        if (delta > 1 && delta <= AUDIO_MAX_MISSED_RUN)
+        {
+            LightLock_Lock(&settingsLock);
+            status.audioMissed += delta - 1;
+            LightLock_Unlock(&settingsLock);
+        }
+    }
+    aud.haveIndex = true;
+    aud.lastIndex = index;
+
+    if (aud.pending != 0 && index != aud.packetFirst + aud.pending)
+        sendAudio();
+    if (audioSock < 0)
+        return;
+    if (aud.pending == 0)
+    {
+        aud.packetFirst = index;
+        aud.pendingTick = now;
+    }
+
+    memcpy(aud.packet + AUDIO_HEADER_SIZE + aud.pending * DSPAUDIO_FRAME_BYTES, b->samples, DSPAUDIO_FRAME_BYTES);
+    if (++aud.pending == AUDIO_FRAMES_PER_PACKET)
+        sendAudio();
+}
+
+static void audioThreadMain(void)
+{
+    DspAudioBlock blocks[2];
+
+    while (!stopRequested && !preTerminationRequested)
+    {
+        if (linkDown || Sleep__IsSleeping())
+        {
+            closeSocket(&audioSock);
+            forgetPlayer();
+            svcSleepThread(LINK_DOWN_SLEEP_NS);
+            continue;
+        }
+
+        if (audioSock < 0)
+        {
+            forgetPlayer();
+            audioSock = openAudioSocket();
+            if (audioSock < 0)
+            {
+                svcSleepThread(1000 * 1000 * 1000LL);
+                continue;
+            }
+        }
+
+        u64 now = svcGetSystemTick();
+        if (now - aud.lastHelloCheckTick >= (u64)AUDIO_HELLO_CHECK_US * TICKS_PER_US)
+        {
+            aud.lastHelloCheckTick = now;
+            checkHello(now);
+        }
+        if (aud.playerIp != 0 && now - aud.lastHelloTick >= (u64)AUDIO_PLAYER_TIMEOUT_US * TICKS_PER_US)
+            forgetPlayer();
+
+        if (aud.playerIp == 0 || audioSock < 0)
+        {
+            svcSleepThread(AUDIO_IDLE_NS);
+            continue;
+        }
+
+        u32 n = DspAudio_Poll(&aud.reader, blocks);
+        for (u32 i = 0; i < n && audioSock >= 0; i++)
+            addFrame(&blocks[i], now);
+
+        if (aud.pending != 0 && audioSock >= 0 && now - aud.pendingTick >= (u64)AUDIO_FLUSH_US * TICKS_PER_US)
+            sendAudio();
+
+        svcSleepThread(AUDIO_POLL_NS);
+    }
+}
+
+
 static Result freeEverything(void)
 {
     if (clockStateBefore >= 0)
@@ -1093,6 +1338,7 @@ static Result freeEverything(void)
 
     closeSocket(&listenSock);
     closeSocket(&videoSock);
+    closeSocket(&audioSock);
 
     if (socInitialized)
     {
@@ -1119,7 +1365,7 @@ static Result freeEverything(void)
 
 static Result joinThreads(void)
 {
-    MyThread *threads[] = { &controlThread, &senderThread, &encoderThread };
+    MyThread *threads[] = { &controlThread, &senderThread, &encoderThread, &audioThread };
     Result result = 0;
     LightEvent_Signal(&slotFilled);
     LightEvent_Signal(&slotFreed);
@@ -1201,10 +1447,13 @@ Result RemotePlay_Start(void)
     if (R_FAILED(res = MyThread_Create(&encoderThread, encoderThreadMain, buffers->encoderStack,
                                        ENCODER_STACK_SIZE, ENCODER_THREAD_PRIO, VIDEO_THREAD_CORE)))
         goto fail;
+    if (R_FAILED(res = MyThread_Create(&audioThread, audioThreadMain, buffers->audioStack,
+                                       AUDIO_STACK_SIZE, AUDIO_THREAD_PRIO, VIDEO_THREAD_CORE)))
+        goto fail;
     goto done;
 fail:
     stopRequested = true;
-    if (controlThread.handle || senderThread.handle || encoderThread.handle)
+    if (controlThread.handle || senderThread.handle || encoderThread.handle || audioThread.handle)
     {
         Result joined = joinThreads();
         if (R_FAILED(joined))

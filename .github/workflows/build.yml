@@ -46,6 +46,11 @@ jobs:
       - run: python3 tests/plugin_format.py
       - run: python3 tests/plugin_security.py
       - run: python3 tests/plugin_legacy_scanner.py
+      - run: python3 tests/plugin_filesystem.py
+      - run: python3 tests/plugin_path_ipc.py
+      - run: python3 tests/plugin_legacy_format.py
+      - run: python3 tests/plugin_snapshot.py
+      - run: python3 tests/streaming_audio.py
       - run: python3 tests/plguds_ipc.py
       - run: python3 tools/update_font.py && git diff --exit-code -- '**/japanese_font.h' '**/japanese_lookup.h'
 

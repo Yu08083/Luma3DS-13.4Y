@@ -227,7 +227,7 @@ for version in ('Luma3DS_v13_4',):
     globals_code = colors[colors.index('u32 g_accentColor ='):colors.index('#define HUE_X')]
     hsv_code = colors[colors.index('static u16 AccentHsv('):colors.index('static void AccentPixel(')]
     apply_code = colors[colors.index('static void ColorsApply('):colors.index('static void SdmcDeleteFile(')]
-    color_menu = colors[colors.index('static void ColorsSave('):colors.index('static u64 Checker_GetForegroundTitleId(')] if version == 'Luma3DS_v13_4' else ''
+    color_menu = colors[colors.index('static void ColorsSave('):colors.index('void LogLine(')] if version == 'Luma3DS_v13_4' else ''
     title = re.search(r'^#define COLOR_TITLE (.+)$', (base / 'include/draw.h').read_text(encoding='utf-8'), re.M)[1]
     target = generated / (version + '_controls.c')
     target.write_text('#define NEWER ' + str(int(version == 'Luma3DS_v13_4')) + '\n#define COLOR_TITLE ' + title + '\n' + prefix + globals_code + hsv_code + apply_code + color_menu + code + main, encoding='utf-8', newline='\n')

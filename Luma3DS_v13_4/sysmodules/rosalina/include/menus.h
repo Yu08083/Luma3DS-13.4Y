@@ -35,7 +35,6 @@ extern Menu rosalinaMenu;
 void RosalinaMenu_TakeScreenshot(void);
 void RosalinaMenu_ShowCredits(void);
 void RosalinaMenu_AccentColor(void);
-void RosalinaMenu_3gxTxtChecker(void);
 void RosalinaMenu_CheckSdCard(void);
 void RosalinaMenu_FileBrowser(void);
 void RosalinaMenu_ProcessList(void);

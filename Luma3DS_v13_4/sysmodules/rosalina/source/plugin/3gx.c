@@ -4,6 +4,7 @@
 #include "ifile.h"
 #include "utils.h"
 #include "plugin/payload_vm.h"
+#include "plugin/legacy.h"
 
 u32 g_loadExeArgs[4];
 static PluginPayload loadProgram;
@@ -27,6 +28,7 @@ Result Check_3gx_Magic(IFile *file)
     Result result = IFile_Read(file, &total, &magic, sizeof(magic));
     if(R_FAILED(result)) return result;
     if(total != sizeof(magic)) return invalidPlugin();
+    if(magic == PLUGIN_LEGACY_MAGIC) return 0;
     if((u32)magic != (u32)_3GX_MAGIC) return MAKERESULT(RL_PERMANENT, RS_INVALIDARG, RM_LDR, 1);
     u32 version = invertEndianness((u32)(magic >> 32));
     u32 expected = invertEndianness((u32)(_3GX_MAGIC >> 32));
@@ -39,8 +41,12 @@ Result Read_3gx_Header(IFile *file, _3gx_Header *header)
     u64 total = 0;
     memset(header, 0, sizeof(*header));
     file->pos = 0;
-    Result result = IFile_Read(file, &total, header, sizeof(*header));
-    return R_FAILED(result) ? result : total == sizeof(*header) ? 0 : invalidPlugin();
+    Result result = IFile_Read(file, &total, header, sizeof(header->magic));
+    if(R_FAILED(result) || total != sizeof(header->magic)) return R_FAILED(result) ? result : invalidPlugin();
+    u32 remaining = header->magic == PLUGIN_LEGACY_MAGIC ? PLUGIN_LEGACY_HEADER_SIZE : sizeof(*header);
+    remaining -= sizeof(header->magic);
+    result = IFile_Read(file, &total, (u8 *)header + sizeof(header->magic), remaining);
+    return R_FAILED(result) ? result : total == remaining ? 0 : invalidPlugin();
 }
 
 Result Read_3gx_ParseHeader(const u8 *file, _3gx_Header *header)

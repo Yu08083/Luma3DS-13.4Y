@@ -10,6 +10,7 @@
 #include "menu.h"
 #include "draw.h"
 #include "plugin/file_format.h"
+#include "plugin/legacy.h"
 
 
 static FS_DirectoryEntry   g_entries[10];
@@ -689,6 +690,8 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
     _3gx_Header *header = &parsedHeader;
     PluginFileLayout layout;
     u8 *snapshot = NULL;
+    bool legacyFile = false;
+    u8 legacyHeader[PLUGIN_LEGACY_HEADER_SIZE];
     PluginLoaderContext *ctx = &PluginLoaderCtx;
     PluginHeader        *pluginHeader = &ctx->header;
     const u32           memRegionSizes[] =
@@ -743,6 +746,14 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
     if (!res && R_FAILED((res = Read_3gx_Header(&plugin, &fileHeader))))
         ctx->error.message = "Couldn't read file";
 
+    if (!res && fileHeader.magic == PLUGIN_LEGACY_MAGIC)
+    {
+        legacyFile = true;
+        memcpy(legacyHeader, &fileHeader, sizeof(legacyHeader));
+        memset(&fileHeader, 0, sizeof(fileHeader));
+        fileHeader.magic = _3GX_MAGIC;
+    }
+
 
     if (!res && fileHeader.infos.compatibility == PLG_COMPAT_EMULATOR) {
         ctx->error.message = "Plugin is only compatible with emulators";
@@ -757,7 +768,9 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
     }
 
 
-    if(!res && (fileSize > 0xFFFFFFFFULL || !PluginFile_Validate(&fileHeader, fileSize, memRegionSizes[fileHeader.infos.memoryRegionSize], sizeof(PluginHeader), &layout)))
+    if(!res && (fileSize > 0xFFFFFFFFULL ||
+       (legacyFile ? !PluginLegacy_ValidateHeader(legacyHeader, fileSize, memRegionSizes[0]) :
+        !PluginFile_Validate(&fileHeader, fileSize, memRegionSizes[fileHeader.infos.memoryRegionSize], sizeof(PluginHeader), &layout))))
     {
         ctx->error.message = "Invalid plugin layout or memory size.";
         res = -1;
@@ -775,11 +788,51 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
     if(!res)
     {
         snapshot = ctx->memblock.memblock;
+        if(!legacyFile && fileSize > layout.snapshotSize) fileSize = layout.snapshotSize;
         u64 total = 0;
         plugin.pos = 0;
         res = IFile_Read(&plugin, &total, snapshot, fileSize);
-        if(res || total != fileSize || memcmp(snapshot, &fileHeader, sizeof(fileHeader)) ||
-           !PluginFile_Validate(snapshot, fileSize, g_memBlockSize, sizeof(PluginHeader), &layout) ||
+        if(res || total != fileSize ||
+           memcmp(snapshot, legacyFile ? legacyHeader : (const void *)&fileHeader,
+                  legacyFile ? sizeof(legacyHeader) : sizeof(fileHeader)))
+        {
+            ctx->error.message = "Plugin changed, is invalid, or could not be fully read.";
+            res = -1;
+        }
+    }
+    if(!res && legacyFile)
+    {
+        if(!PluginLegacy_Validate(snapshot, fileSize, g_memBlockSize))
+        {
+            ctx->error.message = "Unsupported or invalid legacy plugin layout.";
+            res = -1;
+        }
+        else
+        {
+            _3gx_Header scanHeader;
+            memset(&scanHeader, 0, sizeof(scanHeader));
+            memcpy(&scanHeader.executable.codeOffset, legacyHeader + 0x10, 4);
+            memcpy(&scanHeader.executable.codeSize, legacyHeader + 0xC, 4);
+            if(!CheckForDestructivePlugin(snapshot, &scanHeader, (u32)fileSize))
+            {
+                ctx->error.message = NULL;
+                res = -1;
+            }
+        }
+        if(!res)
+        {
+            u32 convertedSize = 0;
+            if(!PluginLegacy_Convert(snapshot, fileSize, g_memBlockSize, &convertedSize))
+            {
+                ctx->error.message = "Could not convert legacy plugin safely.";
+                res = -1;
+            }
+            else fileSize = convertedSize;
+        }
+    }
+    if(!res)
+    {
+        if(!PluginFile_Validate(snapshot, fileSize, g_memBlockSize, sizeof(PluginHeader), &layout) ||
            !PluginFile_ValidateStrings(snapshot, fileSize))
         {
             ctx->error.message = "Plugin changed, is invalid, or could not be fully read.";
@@ -788,13 +841,14 @@ bool     TryToLoadPlugin(Handle process, bool isHomebrew)
         else
         {
             memcpy(header, snapshot, sizeof(*header));
+            memcpy(&fileHeader, snapshot, sizeof(fileHeader));
         }
     }
     if(!res) res = Read_3gx_ParseHeader(snapshot, header);
     if(!res && R_FAILED(res = Read_3gx_EmbeddedPayloads(snapshot, header))) ctx->error.message = "Invalid save/load payloads.";
     if(!res) ctx->exeLoadChecksum = header->infos.exeLoadChecksum;
     if(!res) res = CheckPluginCompatibility(header, (u32)tid);
-    if(!res && !CheckForDestructivePlugin(snapshot, &fileHeader, (u32)fileSize))
+    if(!res && !legacyFile && !CheckForDestructivePlugin(snapshot, &fileHeader, (u32)fileSize))
     {
         ctx->error.message = NULL;
         res = -1;

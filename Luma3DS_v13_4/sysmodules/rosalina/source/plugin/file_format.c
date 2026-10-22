@@ -12,7 +12,7 @@ static bool formatSpan(uint32_t offset, uint32_t length, uint32_t fileSize)
 
 bool PluginFile_Validate(const void *header, uint32_t fileSize, uint32_t memorySize, uint32_t pluginHeaderSize, PluginFileLayout *layout)
 {
-    if(!header || !layout || fileSize < 0x94 || fileSize > memorySize || pluginHeaderSize > 0x1000) return false;
+    if(!header || !layout || fileSize < 0x94 || pluginHeaderSize > 0x1000) return false;
     const uint8_t *data = header;
     if(formatWord(data, 0) != 0x24584733 || formatWord(data, 4) != 0x32303030 || formatWord(data, 12)) return false;
     uint32_t flags = formatWord(data, 0x30);
@@ -27,16 +27,18 @@ bool PluginFile_Validate(const void *header, uint32_t fileSize, uint32_t memoryS
     if(dataOffset != rodataOffset + rodataSize || !formatSpan(dataOffset, dataSize, fileSize)) return false;
     uint64_t image = (uint64_t)codeSize + rodataSize + dataSize;
     uint64_t executable = (pluginHeaderSize + image + bssSize + 0x1000) & ~0xFFFULL;
-    uint64_t snapshot = ((uint64_t)fileSize + 15) & ~15ULL;
-    if(executable >= memorySize || snapshot > memorySize) return false;
+    uint64_t extent = (uint64_t)dataOffset + dataSize;
+    if(executable >= memorySize) return false;
     for(uint32_t field = 0x10; field < 0x30; field += 8)
     {
         uint32_t length = formatWord(data, field), offset = formatWord(data, field + 4);
         if(length && !formatSpan(offset, length, fileSize)) return false;
         if(field < 0x20 && length > 256) return false;
+        if(length && (uint64_t)offset + length > extent) extent = (uint64_t)offset + length;
     }
     uint32_t targets = formatWord(data, 0x80), targetOffset = formatWord(data, 0x84);
     if(targets > 128 || (targets && !formatSpan(targetOffset, targets * 4, fileSize))) return false;
+    if(targets && (uint64_t)targetOffset + targets * 4 > extent) extent = (uint64_t)targetOffset + targets * 4;
     if(flags & 1)
     {
         uint32_t offset = formatWord(data, 0x74);
@@ -50,6 +52,8 @@ bool PluginFile_Validate(const void *header, uint32_t fileSize, uint32_t memoryS
         }
     layout->imageSize = image;
     layout->executableSize = executable;
+    uint64_t snapshot = (extent + 15) & ~15ULL;
+    if(snapshot > memorySize) return false;
     layout->snapshotSize = snapshot;
     return true;
 }

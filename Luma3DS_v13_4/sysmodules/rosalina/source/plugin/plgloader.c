@@ -358,12 +358,28 @@ void     PluginLoader__HandleCommands(void *_ctx)
                 break;
             }
 
+            u32 descriptor = cmdbuf[1];
+            u32 pathSize = descriptor >> 4;
+            u32 mode = descriptor & 15;
+            if (!cmdbuf[2] || !ctx->pluginPath || pathSize < 2 || pathSize > 256 ||
+                (mode != (IPC_Desc_Buffer(1, IPC_BUFFER_W) & 15) &&
+                 mode != (IPC_Desc_Buffer(1, IPC_BUFFER_RW) & 15)))
+            {
+                error(cmdbuf, 0xD9001830);
+                break;
+            }
+            u32 length = strnlen(ctx->pluginPath, 256);
+            if (length >= pathSize)
+            {
+                error(cmdbuf, MAKERESULT(RL_PERMANENT, RS_INVALIDARG, RM_LDR, RD_TOO_LARGE));
+                break;
+            }
             char *path = (char *)cmdbuf[2];
-            strncpy(path, ctx->pluginPath, 255);
+            memcpy(path, ctx->pluginPath, length + 1);
 
             cmdbuf[0] = IPC_MakeHeader(10, 1, 2);
             cmdbuf[1] = 0;
-            cmdbuf[2] = IPC_Desc_Buffer(255, IPC_BUFFER_RW);
+            cmdbuf[2] = descriptor;
             cmdbuf[3] = (u32)path;
 
             break;
