@@ -164,7 +164,7 @@ draw.o: CFLAGS += -O2
 remote_play.o rp_jpeg.o rp_kcopy.o dsp_audio.o: CFLAGS += -fstack-usage
 LTO_OBJECTS := $(filter-out draw.o text.o dsp_audio.o menus.o lang.o $(notdir $(patsubst %.c,%.o,$(wildcard $(TOPDIR)/source/plugin/*.c))),$(OFILES_SRC))
 $(LTO_OBJECTS): CFLAGS += -flto
-plgloader.o 3gx.o file_format.o: CFLAGS += -flto
+plgloader.o 3gx.o file_format.o draw.o menus.o lang.o: CFLAGS += -flto
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
