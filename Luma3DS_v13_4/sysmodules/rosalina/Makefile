@@ -66,7 +66,7 @@ CFLAGS	+=	$(INCLUDE)
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
 ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map),-wrap,exit,--section-start,.text=0x14000000
+LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -flto -Wl,-Map,$(notdir $*.map),-wrap,exit,--section-start,.text=0x14000000
 
 LIBS	:=	-lctru -lm
 
@@ -162,6 +162,8 @@ $(OUTPUT).elf	:	$(OFILES)
 
 draw.o: CFLAGS += -O2
 remote_play.o rp_jpeg.o rp_kcopy.o dsp_audio.o: CFLAGS += -fstack-usage
+LTO_OBJECTS := $(filter-out draw.o text.o dsp_audio.o menus.o lang.o $(notdir $(patsubst %.c,%.o,$(wildcard $(TOPDIR)/source/plugin/*.c))),$(OFILES_SRC))
+$(LTO_OBJECTS): CFLAGS += -flto
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 

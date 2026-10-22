@@ -103,7 +103,7 @@ with tempfile.TemporaryDirectory() as temporary:
     generated = folder / 'path.c'
     generated.write_text(prefix + handler('current', body) + handler('old', legacy) + cases, encoding='utf8')
     target = folder / ('path.exe' if os.name == 'nt' else 'path')
-    subprocess.run([compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', str(generated), '-o', str(target)], check=True, env=environment)
+    subprocess.run([compiler, '-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror', str(generated), '-o', str(target)], check=True, env=environment)
     result = subprocess.run([str(target)], check=True, env=environment, capture_output=True, text=True)
     print(result.stdout, end='')
 count = int(result.stdout.split()[3])
