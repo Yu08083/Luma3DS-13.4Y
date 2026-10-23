@@ -207,6 +207,10 @@ int main(void)
     choose(bad, 3);
     assert(themePixels == (u16 *)memoryA);
     failAllocation = false;
+    held = KEY_B;
+    choose(bad, 3);
+    assert(themePixels == (u16 *)memoryA && strcmp(config, "日本語.bmp") == 0);
+    held = 0;
     const u32 different[] = { KEY_UP, KEY_A };
     choose(different, 2);
     assert(themePixels == (u16 *)memoryB && strcmp(config, "z.png") == 0);

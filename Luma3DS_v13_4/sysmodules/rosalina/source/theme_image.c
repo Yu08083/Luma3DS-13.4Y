@@ -58,7 +58,7 @@ void ThemeImage_Free(void *pointer)
 typedef struct {
     const ThemeImageSource *source;
     uint16_t *pixels;
-    uint32_t width, height, drawWidth, drawHeight, left, top;
+    uint32_t width, height, drawWidth, drawHeight, left, top, scaleX, scaleY;
     uint32_t position, cacheStart, cacheSize;
     bool failed, done;
 } ThemeDecode;
@@ -89,6 +89,8 @@ static bool imageSetSize(ThemeDecode *image, uint32_t width, uint32_t height)
     if(!width || !height || width > THEME_IMAGE_MAX_DIMENSION || height > THEME_IMAGE_MAX_DIMENSION) return false;
     image->width = width;
     image->height = height;
+    image->scaleX = UINT32_MAX / width;
+    image->scaleY = UINT32_MAX / height;
     if(width * 240 > height * 320)
     {
         image->drawWidth = 320;
@@ -106,16 +108,28 @@ static bool imageSetSize(ThemeDecode *image, uint32_t width, uint32_t height)
     return true;
 }
 
+static uint32_t imageScale(uint32_t value, uint32_t scale)
+{
+    return ((uint64_t)value * scale + UINT32_MAX) >> 32;
+}
+
+static uint32_t imageChannel(uint8_t value, uint8_t alpha)
+{
+    return (value * alpha + 1) * 257 >> 16;
+}
+
 static void imagePixel(ThemeDecode *image, uint32_t x, uint32_t y, uint32_t width, uint32_t height, uint8_t r, uint8_t g, uint8_t b, uint8_t alpha)
 {
     if(image->failed || x >= image->width || y >= image->height) return;
     if(width > image->width - x) width = image->width - x;
     if(height > image->height - y) height = image->height - y;
-    uint32_t left = (x * image->drawWidth + image->width - 1) / image->width;
-    uint32_t right = ((x + width) * image->drawWidth + image->width - 1) / image->width;
-    uint32_t top = (y * image->drawHeight + image->height - 1) / image->height;
-    uint32_t bottom = ((y + height) * image->drawHeight + image->height - 1) / image->height;
-    uint16_t color = (uint16_t)(((r * alpha / 255) >> 3) << 11 | ((g * alpha / 255) >> 2) << 5 | (b * alpha / 255) >> 3);
+    uint32_t left = imageScale(x * image->drawWidth, image->scaleX);
+    uint32_t right = imageScale((x + width) * image->drawWidth, image->scaleX);
+    if(left == right) return;
+    uint32_t top = imageScale(y * image->drawHeight, image->scaleY);
+    uint32_t bottom = imageScale((y + height) * image->drawHeight, image->scaleY);
+    if(top == bottom) return;
+    uint16_t color = (uint16_t)((imageChannel(r, alpha) >> 3) << 11 | (imageChannel(g, alpha) >> 2) << 5 | imageChannel(b, alpha) >> 3);
     for(uint32_t dx = left; dx < right; ++dx)
         for(uint32_t dy = top; dy < bottom; ++dy)
             image->pixels[(image->left + dx) * 240 + 239 - image->top - dy] = color;
