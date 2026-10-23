@@ -97,7 +97,7 @@ static bool sameStatus(const StreamingView *first, const StreamingView *second)
 static void drawStatus(const StreamingView *view)
 {
     char address[16];
-    Draw_DrawString(10, 10, g_accentColor, Lang_Translate("Screen capture (wireless)"));
+    Draw_DrawString(10, 10, g_accentColor, Lang_Translate("Yu_ Capture"));
     Draw_DrawFormattedString(10, 38, g_textColor, Lang_Translate("State: %s"), Lang_Translate(stateText(view)));
     if(view->consoleIp)
     {
@@ -153,7 +153,7 @@ void N3DSMenu_Streaming(void)
             bool running = RemotePlay_IsRunning();
             Draw_Lock();
             Draw_ClearFramebuffer();
-            Draw_DrawString(10, 10, g_accentColor, Lang_Translate("Screen capture (wireless)"));
+            Draw_DrawString(10, 10, g_accentColor, Lang_Translate("Yu_ Capture"));
             Draw_DrawString(10, 38, g_textColor, Lang_Translate(running ? "Stopping..." : "Starting..."));
             Draw_FlushFramebuffer();
             Draw_Unlock();

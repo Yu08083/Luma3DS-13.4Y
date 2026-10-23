@@ -31,7 +31,7 @@ pairs = [tuple(ast.literal_eval(value) for value in match) for match in re.finda
     r'\{\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")\s*\}', table)]
 assert [english for english, _ in pairs] == sorted({english for english, _ in pairs})
 translations = dict(pairs)
-for label in ['Screen capture (wireless)', 'Close Rosalina to stream video', 'State: %s', 'OFF', 'Streaming', 'Waiting for viewer',
+for label in ['Yu_ Capture', 'Close Rosalina to stream video', 'State: %s', 'OFF', 'Streaming', 'Waiting for viewer',
               'Paused (offline)', '3DS IP: %s', 'Viewer IP: %s', 'FPS: %lu   Quality: %lu',
               'Waiting for Wi-Fi.', 'Receiver: NTR mode', 'Starting...', 'Stopping...',
               'A: start     B: back', 'A: stop      B: back', 'Operation failed (0x%08lx).']:
@@ -161,7 +161,7 @@ int main(void)
     {
         reset(false);g_language=(LangCode)language;N3DSMenu_Streaming();
         CHECK(frame_count==1&&start_count==0&&stop_count==0&&save_count==0&&ip_count==0);
-        CHECK(contains(0,language?"画面キャプチャ (無線)":"Screen capture (wireless)"));
+        CHECK(contains(0,language?"Yu_ キャプチャ":"Yu_ Capture"));
         CHECK(contains(0,language?"A: 開始":"A: start"));colors(0);
         reset(true);g_language=(LangCode)language;status.fps=status.quality=UINT32_MAX;N3DSMenu_Streaming();
         CHECK(frame_count==1&&save_count==1&&ip_count==1);
@@ -186,7 +186,7 @@ int main(void)
     reset(false);keys[0]=KEY_A|KEY_B;N3DSMenu_Streaming();CHECK(start_count==0&&stop_count==0);
     reset(true);key_count=3;keys[0]=keys[1]=0;keys[2]=KEY_B;N3DSMenu_Streaming();CHECK(frame_count==1&&save_count==1&&ip_count==3);
     reset(true);key_count=3;keys[0]=keys[1]=0;keys[2]=KEY_B;wait_hook=unseen_stat;N3DSMenu_Streaming();CHECK(frame_count==1&&save_count==1);
-    reset(true);key_count=2;keys[0]=0;keys[1]=KEY_B;wait_hook=change_language;N3DSMenu_Streaming();CHECK(frame_count==2&&contains(1,"画面キャプチャ (無線)"));
+    reset(true);key_count=2;keys[0]=0;keys[1]=KEY_B;wait_hook=change_language;N3DSMenu_Streaming();CHECK(frame_count==2&&contains(1,"Yu_ キャプチャ"));
     reset(true);key_count=2;keys[0]=0;keys[1]=KEY_B;wait_hook=change_color;N3DSMenu_Streaming();CHECK(frame_count==2);colors(1);
     reset(true);console_ip=UINT32_MAX;N3DSMenu_Streaming();CHECK(!contains(0,"3DS IP"));
     reset(true);console_ip=0;N3DSMenu_Streaming();CHECK(!contains(0,"3DS IP"));

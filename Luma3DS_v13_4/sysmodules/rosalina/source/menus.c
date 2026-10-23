@@ -57,7 +57,7 @@ Menu rosalinaMenu = {
     "Rosalina menu",
     {
         { "Take screenshot", METHOD, .method = &RosalinaMenu_TakeScreenshot },
-        { "Screen capture (wireless)...", METHOD, .method = &N3DSMenu_Streaming, .visibility = &menuCheckN3ds },
+        { "Yu_ Capture...", METHOD, .method = &N3DSMenu_Streaming, .visibility = &menuCheckN3ds },
         { "Screen filters...", MENU, .menu = &screenFiltersMenu },
         { "Cheats...", METHOD, .method = &RosalinaMenu_Cheats },
         { "Plugin Loader: [Disabled]", METHOD, .method = PluginLoader__MenuCallback},
