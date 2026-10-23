@@ -19,6 +19,7 @@
 #include <3ds.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <stddef.h>
 #include "csvc.h"
 #include "dsp_audio.h"
 #include "draw.h"
@@ -1190,7 +1191,7 @@ static void checkHello(u64 now)
             closeSocket(&audioSock);
             return;
         }
-        if (fromLen < sizeof(from) || from.sin_family != AF_INET || !from.sin_port ||
+        if (fromLen < offsetof(struct sockaddr_in, sin_addr) + sizeof(from.sin_addr) || from.sin_family != AF_INET || !from.sin_port ||
             !from.sin_addr.s_addr || n < 4 || memcmp(buf, AUDIO_HELLO_MAGIC, 4) != 0)
             continue;
 
