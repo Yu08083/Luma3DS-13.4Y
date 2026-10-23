@@ -1,10 +1,10 @@
 # Luma3DS v13.4Y
 
-Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。ver.y10。更新日: 2026-10-23。
+Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。ver.y11。更新日: 2026-10-23。
 
 ## 導入
 
-[リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.4Y.zip` を展開し、`3DS` フォルダーの中身をSDカードのルートへ上書きします。
+[リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.4Y.zip` を展開し、中身をSDカードのルートへ上書きします。`boot.firm` と `3ds/luma/9.1/boot.firm`、`3ds/luma/13.4/boot.firm` が入ります。
 
 - Rosalina: L + 十字下 + SELECTで開きます。`Language / 言語` で日本語・Englishを切り替え、Aで保存します。
 - Rosalinaの起動ボタン: STARTを押しながら起動し、`Rosalinaを開くボタン...` を選びます。Aでボタンを切り替え、STARTで保存、Bで取り消し、Xで標準へ戻します。
@@ -14,13 +14,13 @@ Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作�
 - 背景テーマ: `SD:/3ds/luma/RosaliaTheme/` に画像を置き、メニューで選びます。PNG・無圧縮BMP・ベースラインJPEG、最大1024×1024・4MB。320×240を推奨します。
 - 3GX検査: 元のLuma3DS_New v1.3と同じ検知方式です。警告でAを押して許可した3GXはSDへ記録し、再起動後も保持します。対象領域の内容が変わった場合は再確認します。
 - FTP: Wi-Fiへ接続して開始し、接続待ちになったら表示IPのポート `5000` へ接続します。暗号化なし・パッシブモードを指定します。
-- 画面キャプチャ（New 3DS / New 2DS）: Rosalinaの `Screen capture (wireless)... / 画面キャプチャ (無線)...` を開き、Aで開始します。同じネットワークの受信アプリをNTRモードにし、表示された本体IPへ接続します。PCではSnickerstream・Chokistream、AndroidではAdorableNTRのNTR方式を使います。開始後はRosalinaを閉じてゲーム画面へ戻ります。Aで停止します。HzMod方式には対応していません。映像のみ対応します。
+- 画面キャプチャ（New 3DS / New 2DS）: Rosalinaの `Screen capture (wireless)... / 画面キャプチャ (無線)...` を開き、Aで開始します。同じネットワークの受信アプリをNTRモードにし、表示された本体IPへ接続します。PCではSnickerstream・Chokistream、AndroidではAdorableNTRのNTR方式を使います。開始後はRosalinaを閉じてゲーム画面へ戻ります。Aで停止します。HzMod方式には対応していません。Level256方式の音声にも対応します。
 
-画面転送にはTCP `8000`・UDP `8001` を使います。Rosalina操作中・スリープ中・Wi-Fi切断中は一時停止します。
+画面転送にはTCP `8000`・UDP `8001`、音声にはUDP `8002` を使います。Rosalina操作中・スリープ中・Wi-Fi切断中は一時停止します。
 
 3DS実機での起動・FTP接続・画面転送は未確認です。
 
-yu_ installerのLumaタブから更新できます。更新後は本体を再起動してください。
+yu_ installerのLumaタブから更新できます。ver.y16以降では切り替え用の2ファイルも補完します。更新後は本体を再起動してください。
 
 ## ビルド
 
@@ -33,6 +33,8 @@ bash build.bat 1
 Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生成されます。libctruは初回に固定バージョンを取得してビルドするため、ネット接続が必要です。
 
 使用する[libctru](https://github.com/devkitPro/libctru)はv2.7.0（`36fe1ada5b7ebe53ba4decda36d764a55f8fefb6`）です。その他のツールの固定版と検証手順は [.github/workflows/build.yml](.github/workflows/build.yml) にあります。
+
+切り替え用v9.1の元ファイルは `assets/legacy/boot-9.1.firm`、対応ソースは `Luma3DS_v9_1/` です。通常のビルドではv13.4Yをビルドし、検証済みのv9.1を同梱します。
 
 ## ライセンス
 

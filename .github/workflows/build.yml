@@ -27,6 +27,7 @@ jobs:
       - run: python3 tests/themes.py
       - run: python3 tests/theme_menu.py
       - run: python3 tests/firm_modules.py
+      - run: python3 tests/version_copies.py
       - run: python3 tests/updater_format.py
       - run: python3 tests/updater_clock.py
       - run: python3 tests/updater_tls.py
@@ -83,7 +84,7 @@ jobs:
         run: |
           python3 tools/check_firm.py 3DS
           cd 3DS
-          sha256sum boot.firm 3ds/luma/13.4/boot.firm > SHA256SUMS.txt
+          sha256sum boot.firm 3ds/luma/9.1/boot.firm 3ds/luma/13.4/boot.firm > SHA256SUMS.txt
       - name: Firmware
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

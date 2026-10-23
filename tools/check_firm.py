@@ -5,7 +5,7 @@ from pathlib import Path
 from firm_modules import bundled_native_modules
 
 root = Path(sys.argv[1])
-for path in (root / 'boot.firm', root / '3ds/luma/13.4/boot.firm'):
+for path in (root / 'boot.firm', root / '3ds/luma/9.1/boot.firm', root / '3ds/luma/13.4/boot.firm'):
     data = path.read_bytes()
     assert data[:4] == b'FIRM' and len(data) >= 0x200, str(path)
     regions = []

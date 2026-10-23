@@ -216,9 +216,7 @@ report_kext "$V134_DIR/k11_extension/k11_extension.elf" 0x70000000 "v13.4Y"
 
 STAGE="3DS フォルダの作成"
 rm -rf "$DIST"
-mkdir -p "$DIST/3ds/luma/13.4"
-cp "$V134_FIRM" "$DIST/boot.firm"
-cp "$V134_FIRM" "$DIST/3ds/luma/13.4/boot.firm"
+python3 "$ROOT/tools/stage_firmware.py" "$V134_FIRM" "$DIST"
 
 {
   echo
