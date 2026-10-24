@@ -55,6 +55,12 @@ data = struct.pack('<16I', *range(16))
 success, unchanged, checksum = run(sum_words, data)
 assert success and unchanged == data and checksum == 120
 
+for value in (0, 1, 127, 255):
+    words = [0xE3A00000 | value]
+    success, actual, checksum = run(words, data)
+    expected, expected_checksum = emulate(words + [0xE12FFF1E], data, (0, 0, 0, 0))
+    assert success and (actual, checksum) == (expected, expected_checksum)
+
 rng = random.Random(1334)
 for _ in range(400):
     words = [0xE1A0C000, 0xE8920078]

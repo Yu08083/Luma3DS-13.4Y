@@ -23,11 +23,15 @@ bool PluginFile_Validate(const void *header, uint32_t fileSize, uint32_t memoryS
     uint32_t bssSize = formatWord(data, 0x70);
     if(!codeSize || (codeOffset | codeSize | rodataSize | dataSize) & 3) return false;
     if(!formatSpan(codeOffset, codeSize, fileSize)) return false;
-    if(rodataOffset != codeOffset + codeSize || !formatSpan(rodataOffset, rodataSize, fileSize)) return false;
-    if(dataOffset != rodataOffset + rodataSize || !formatSpan(dataOffset, dataSize, fileSize)) return false;
+    uint32_t rodataStart = codeOffset + codeSize;
+    if(rodataSize ? rodataOffset != rodataStart || !formatSpan(rodataOffset, rodataSize, fileSize) :
+       rodataOffset && rodataOffset != rodataStart) return false;
+    uint32_t dataStart = rodataStart + rodataSize;
+    if(dataSize ? dataOffset != dataStart || !formatSpan(dataOffset, dataSize, fileSize) :
+       dataOffset && dataOffset != dataStart) return false;
     uint64_t image = (uint64_t)codeSize + rodataSize + dataSize;
     uint64_t executable = (pluginHeaderSize + image + bssSize + 0x1000) & ~0xFFFULL;
-    uint64_t extent = (uint64_t)dataOffset + dataSize;
+    uint64_t extent = (uint64_t)codeOffset + image;
     if(executable >= memorySize) return false;
     for(uint32_t field = 0x10; field < 0x30; field += 8)
     {

@@ -179,7 +179,7 @@ bool PluginPayload_Run(const PluginPayload *program, void *buffer, uint32_t size
     while(budget--)
     {
         uint32_t pc = vm.registers[15];
-        if(pc == VM_RETURN) { *checksum = vm.registers[0]; return true; }
+        if(pc == VM_RETURN || pc == VM_CODE + program->count * 4) { *checksum = vm.registers[0]; return true; }
         if((pc & 3) || !vmSpan(pc, VM_CODE, program->count * 4, 4)) return false;
         uint32_t instruction = program->code[(pc - VM_CODE) / 4];
         uint32_t next = pc + 4;
