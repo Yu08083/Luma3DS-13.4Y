@@ -44,6 +44,9 @@
 #include "plugin.h"
 #include "menus/screen_filters.h"
 #include "shell.h"
+#include "remote_play.h"
+#include "sleep.h"
+#include "menu_capture_ip.h"
 
 
 
@@ -430,6 +433,7 @@ typedef struct {
     u32 selected;
     u32 scroll;
     u32 visibleMask;
+    bool captureRunning;
     bool valid;
 } MenuDrawState;
 
@@ -494,7 +498,7 @@ static void menuReadVersion(void)
     svcGetSystemInfo(&value, 0x10000, 0x200);
     menuIsRelease = (bool)value;
     if (GET_VERSION_MAJOR(version) == 13 && GET_VERSION_MINOR(version) == 4 && GET_VERSION_REVISION(version) == 0)
-        strcpy(menuVersionString, FORK_DISPLAY_VERSION);
+        strcpy(menuVersionString, FORK_RELEASE_VERSION);
     else if (GET_VERSION_REVISION(version) == 0)
         sprintf(menuVersionString, "v%lu.%lu", (unsigned long)GET_VERSION_MAJOR(version), (unsigned long)GET_VERSION_MINOR(version));
     else
@@ -563,7 +567,9 @@ static void menuDraw(Menu *menu, u32 selected, bool refreshStatus, MenuDrawState
     bool scrolled = state->scroll != menuScrollOffset;
     bool selectionChanged = !state->valid || state->selected != selected;
     bool statusChanged = menuRefreshStatus(refreshStatus);
-    if (!full && !scrolled && !selectionChanged && !statusChanged)
+    bool captureRunning = menu == &rosalinaMenu && isN3DS && RemotePlay_IsRunning();
+    bool captureChanged = state->captureRunning != captureRunning;
+    if (!full && !scrolled && !selectionChanged && !statusChanged && !captureChanged)
         return;
     menuReadVersion();
     AccentColor_EnsureLoaded();
@@ -601,16 +607,17 @@ static void menuDraw(Menu *menu, u32 selected, bool refreshStatus, MenuDrawState
         Draw_DrawCharacter(10, 30 + (previousRow - menuScrollOffset) * SPACING_Y, g_cursorColor, ' ');
         Draw_DrawCharacter(10, 30 + (selectedRow - menuScrollOffset) * SPACING_Y, g_cursorColor, '>');
     }
-    if (full || statusChanged)
+    if (full || statusChanged || captureChanged)
     {
-        Draw_FillRect(220, 10, 100, 10, g_menuBgColor);
-        if (miniSocEnabled)
+        Draw_FillRect(219, 10, 101, 10, g_menuBgColor);
+        if (captureRunning)
         {
-            char ipBuffer[17];
-            u32 ip = miniSocGetCachedHostId();
-            u8 *addr = (u8 *)&ip;
-            int n = sprintf(ipBuffer, "%hhu.%hhu.%hhu.%hhu", addr[0], addr[1], addr[2], addr[3]);
-            Draw_DrawString(SCREEN_BOT_WIDTH - 10 - SPACING_X * n, 10, COLOR_WHITE, ipBuffer);
+            RemotePlayStatus capture;
+            RemotePlay_GetStatus(&capture);
+            char ipBuffer[16];
+            MenuCaptureIp_Format(ipBuffer, true, true, true, capture.noNetwork,
+                Sleep__IsSleeping(), miniSocGetCachedHostId());
+            Draw_DrawString(SCREEN_BOT_WIDTH - 10 - Draw_MeasureString(ipBuffer), 10, g_textColor, ipBuffer);
         }
         Draw_FillRect(0, SCREEN_BOT_HEIGHT - 20, SCREEN_BOT_WIDTH, SPACING_Y, g_menuBgColor);
         if (menuMcuResult == 0)
@@ -634,6 +641,7 @@ static void menuDraw(Menu *menu, u32 selected, bool refreshStatus, MenuDrawState
     state->selected = selected;
     state->scroll = menuScrollOffset;
     state->visibleMask = visibleMask;
+    state->captureRunning = captureRunning;
     state->valid = true;
     Draw_FlushFramebuffer();
     Draw_SetMenuBackground(NULL);

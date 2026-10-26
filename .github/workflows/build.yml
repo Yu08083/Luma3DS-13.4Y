@@ -15,6 +15,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 tests/verify.py
       - run: python3 tests/navigation.py
+      - run: python3 tests/capture_ip.py
       - run: python3 tests/boot.py
       - run: python3 tests/boot_menu.py
       - run: python3 tests/boot_rosalina.py

@@ -22,6 +22,7 @@ prefix = r'''
 #include <string.h>
 #include "menu_input.h"
 #include "text.h"
+#include "menu_capture_ip.h"
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -38,6 +39,12 @@ typedef struct {
     bool (*visibility)(void);
 } MenuItem;
 struct Menu { const char *title; u32 nbItems; MenuItem items[32]; };
+static Menu rosalinaMenu;
+static bool isN3DS = true;
+typedef struct { bool noNetwork; } RemotePlayStatus;
+static bool RemotePlay_IsRunning(void) { return false; }
+static void RemotePlay_GetStatus(RemotePlayStatus *out) { (void)out; assert(false); }
+static bool Sleep__IsSleeping(void) { return false; }
 #define KEY_A 1
 #define KEY_B 2
 #define KEY_RIGHT 16
@@ -249,7 +256,7 @@ int main(void)
     menuDraw(&root, 0, false, &state);
     assert(queryCount == 0 && systemCount == 3 && clears == 1);
     assert(activeBackground == NULL);
-    assert(strcmp(menuVersionString, NEWER ? "v13.4Y" : "v9.1") == 0);
+    assert(strcmp(menuVersionString, NEWER ? FORK_RELEASE_VERSION : "v9.1") == 0);
     resetCounts();
     menuDraw(&root, 1, false, &state);
     assert(cursors == 2 && strings == 0 && clears == 0 && flushes == 1 && queryCount == 0 && systemCount == 3);
@@ -310,8 +317,9 @@ for version in ('Luma3DS_v13_4',):
     waits = source[source.index('static u32 waitStableButtons('):source.index('static MyThread menuThread;')]
     if newer:
         waits = source[source.index('static u32 waitInputTimed('):source.index('static u32 scanHeldKeys(')] + waits
-    target.write_text('#define NEWER ' + str(int(newer)) + '\n#define FORK_DISPLAY_VERSION "' + ('v13.4Y' if newer else 'v9.1') + '"\n' + prefix + waits + code + main, encoding='utf-8', newline='\n')
+    release = (base / 'include/menu.h').read_text(encoding='utf8').split('#define FORK_RELEASE_VERSION ', 1)[1].splitlines()[0]
+    target.write_text('#define NEWER ' + str(int(newer)) + '\n#define FORK_RELEASE_VERSION ' + release + '\n#define FORK_DISPLAY_VERSION "' + ('v13.4Y' if newer else 'v9.1') + '"\n' + prefix + waits + code + main, encoding='utf-8', newline='\n')
     executable = target.with_suffix('.exe' if os.name == 'nt' else '')
-    subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-variable', '-O2', '-I' + str(base / 'include'), str(target), str(base / 'source/menu_input.c'), str(base / 'source/text.c'), '-o', str(executable)], check=True, env=env)
+    subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-variable', '-O2', '-I' + str(base / 'include'), str(target), str(base / 'source/menu_input.c'), str(base / 'source/text.c'), str(base / 'source/menu_capture_ip.c'), '-o', str(executable)], check=True, env=env)
     subprocess.run([str(executable)], check=True, env=env)
     print(version, 'navigation and rendering verified')
