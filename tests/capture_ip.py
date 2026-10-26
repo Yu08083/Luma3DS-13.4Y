@@ -44,6 +44,14 @@ typedef struct { u32 x,y,w,h,color; char text[256]; } Command;
 static Command commands[128];
 static unsigned commandCount,checks;
 #define CHECK(value) do { if(!(value)){fprintf(stderr,"check failed line%d\\n",__LINE__);abort();}++checks; } while(0)
+static int captureFooterFormat(char *out,size_t capacity,const char *format,...)
+{
+ CHECK(capacity==32);
+ va_list values;va_start(values,format);
+ int count=vsnprintf(out,capacity,format,values);va_end(values);
+ CHECK(count>=0&&(size_t)count<capacity);
+ return count;
+}
 ''')
 prefix = function(prefix, 'RemotePlay_IsRunning', ' return captureRunning; ')
 prefix = function(prefix, 'RemotePlay_GetStatus', ' ++snapshotReads;out->noNetwork=captureOffline; ')
@@ -78,6 +86,8 @@ prefix = prefix.replace('static const char *Lang_Translate', 'static const char 
 prefix = '#include <stdarg.h>\n' + prefix
 menu = (base / 'source/menu.c').read_text(encoding='utf8')
 code = menu[menu.index('typedef struct {\n    Menu *menu;'):menu.index('\nvoid menuShow(Menu *root)')]
+assert code.count('int n = sprintf(text, ') == 1
+code = code.replace('int n = sprintf(text, ', 'int n = captureFooterFormat(text, sizeof(text), ')
 release = re.search(r'^#define FORK_RELEASE_VERSION\s+("[^"]+")', (base / 'include/menu.h').read_text(), re.MULTILINE).group(1)
 assert 'socGethostid(' not in code and 'ACU_' not in code and 'miniSocRefreshHostId(' not in code
 
@@ -176,6 +186,7 @@ result['frames'] = values[:-1]
 result['source_sha256'] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                           for path in [base / 'source/menu.c', base / 'source/menu_capture_ip.c', base / 'include/menu_capture_ip.h', base / 'include/menu.h', Path(__file__)]}
 result['hardware_tested'] = False
+result['footer_fixture_boundary'] = 'Only the unchanged battery-footer sprintf is bounded to its actual 32-byte capacity in the host fixture; every call asserts no truncation. Production source, input conversions, format text and geometry checks are preserved.'
 result['scope'] = 'Actual production menuDraw and capture formatter execute; existing status, cached IP, sleep, draw, MCU and SDK boundaries are fixtures. No SOC/AC service from rendering.'
 (args.output / 'report.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
 print(json.dumps({key: result[key] for key in ('passed', 'checks', 'cache_reads', 'status_snapshots', 'soc_ac_calls')}))
