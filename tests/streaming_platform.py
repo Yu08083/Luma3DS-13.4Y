@@ -250,7 +250,7 @@ def arm_proof(compiler,ctrulib,env):
             function=fields[0].rsplit(':',1)[-1].split('.')[0]
             usage[function]=max(usage.get(function,0),int(fields[1]))
     frame=lambda name:usage.get(name,0)
-    encode=frame('encoderThreadMain')+frame('RpJpeg_Encode')+max(frame('encodeBlock')+frame('fdct1d')+frame('putBits'),frame('loadMcu')+frame('loadPixels'),frame('writeHeaders')+frame('putHuffTable'))
+    encode=frame('encoderThreadMain')+frame('RpJpeg_Encode')+max(frame('encodeBlock')+frame('fdct1d')+frame('putBits'),frame('loadBlock')+frame('loadPixels'),frame('writeHeaders')+frame('putHuffTable'))
     copy=frame('encoderThreadMain')+frame('captureScreen')+frame('captureOnce')+frame('RpKernelCopy_Rows')+frame('copyRows')
     assert max(encode,copy)+4096<layout['encoder_stack']
     audio=frame('audioThreadMain')+max(frame('DspAudio_Poll')+frame('readFrameCounter'),frame('checkHello')+frame('startPlayer')+frame('DspAudio_ReaderInit'),frame('addFrame')+frame('sendAudio'))

@@ -990,7 +990,7 @@ static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *sc
         screen->qualityFailureTick = now;
         if (quality <= 1)
             break;
-        quality = quality > 80 ? 80 : quality > 40 ? 40 : 1;
+        quality = quality > 90 ? 90 : quality > 80 ? 80 : quality > 40 ? 40 : 1;
         RpJpeg_SetQuality(&enc.jpeg, quality);
         screen->quality = (u8)quality;
     }

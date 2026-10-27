@@ -291,7 +291,7 @@ static inline void loadPixels(const uint8_t *p, int format, uint8_t *r, uint8_t 
     switch (format)
     {
         case RPJPEG_FMT_RGBA8:
-            for (uint32_t i = 0; i < 16; i++, p += 4)
+            for (uint32_t i = 0; i < 8; i++, p += 4)
             {
                 b[i] = p[1];
                 g[i] = p[2];
@@ -299,7 +299,7 @@ static inline void loadPixels(const uint8_t *p, int format, uint8_t *r, uint8_t 
             }
             break;
         case RPJPEG_FMT_BGR8:
-            for (uint32_t i = 0; i < 16; i++, p += 3)
+            for (uint32_t i = 0; i < 8; i++, p += 3)
             {
                 b[i] = p[0];
                 g[i] = p[1];
@@ -307,7 +307,7 @@ static inline void loadPixels(const uint8_t *p, int format, uint8_t *r, uint8_t 
             }
             break;
         case RPJPEG_FMT_RGB565:
-            for (uint32_t i = 0; i < 16; i++, p += 2)
+            for (uint32_t i = 0; i < 8; i++, p += 2)
             {
                 uint32_t px = p[0] | (p[1] << 8);
                 uint32_t r5 = px >> 11, g6 = (px >> 5) & 0x3F, b5 = px & 0x1F;
@@ -317,7 +317,7 @@ static inline void loadPixels(const uint8_t *p, int format, uint8_t *r, uint8_t 
             }
             break;
         case RPJPEG_FMT_RGB5A1:
-            for (uint32_t i = 0; i < 16; i++, p += 2)
+            for (uint32_t i = 0; i < 8; i++, p += 2)
             {
                 uint32_t px = p[0] | (p[1] << 8);
                 uint32_t r5 = px >> 11, g5 = (px >> 6) & 0x1F, b5 = (px >> 1) & 0x1F;
@@ -327,7 +327,7 @@ static inline void loadPixels(const uint8_t *p, int format, uint8_t *r, uint8_t 
             }
             break;
         default:
-            for (uint32_t i = 0; i < 16; i++, p += 2)
+            for (uint32_t i = 0; i < 8; i++, p += 2)
             {
                 uint32_t px = p[0] | (p[1] << 8);
                 uint32_t r4 = px >> 12, g4 = (px >> 8) & 0xF, b4 = (px >> 4) & 0xF;
@@ -344,37 +344,35 @@ static inline int32_t lumaOf(uint32_t r, uint32_t g, uint32_t b)
     return (int32_t)((77 * r + 150 * g + 29 * b + 128) >> 8) - 128;
 }
 
-static void loadMcu(int32_t yb[4][64], int32_t *cb, int32_t *cr, const uint8_t *src,
-                    uint32_t rowPitch, int format)
+static void loadBlock(int32_t *yb, int32_t *cb, int32_t *cr, const uint8_t *src,
+                      uint32_t rowPitch, int format, uint32_t downsample)
 {
-    uint8_t r0[16], g0[16], b0[16], r1[16], g1[16], b1[16];
+    uint8_t r[2][8], g[2][8], b[2][8];
+    uint32_t factor = 1u << downsample;
+    uint32_t chromaSize = 8u >> downsample;
+    uint32_t shift = 8 + 2 * downsample;
 
-    for (uint32_t y = 0; y < 16; y += 2)
+    for (uint32_t cy = 0; cy < chromaSize; ++cy)
     {
-        loadPixels(src + y * rowPitch, format, r0, g0, b0);
-        loadPixels(src + (y + 1) * rowPitch, format, r1, g1, b1);
-
-        int32_t *yRow0 = yb[(y >> 3) * 2] + (y & 7) * 8;
-        int32_t *yRow1 = yRow0 + 8;
-        int32_t *cbRow = cb + (y >> 1) * 8;
-        int32_t *crRow = cr + (y >> 1) * 8;
-
-        for (uint32_t x = 0; x < 16; x += 2)
+        uint32_t y = cy << downsample;
+        for (uint32_t dy = 0; dy < factor; ++dy)
+            loadPixels(src + (y + dy) * rowPitch, format, r[dy], g[dy], b[dy]);
+        for (uint32_t cx = 0; cx < chromaSize; ++cx)
         {
-            uint32_t bx = (x >> 3) * 64;
-            uint32_t ix = x & 7;
-
-            yRow0[bx + ix]     = lumaOf(r0[x], g0[x], b0[x]);
-            yRow0[bx + ix + 1] = lumaOf(r0[x + 1], g0[x + 1], b0[x + 1]);
-            yRow1[bx + ix]     = lumaOf(r1[x], g1[x], b1[x]);
-            yRow1[bx + ix + 1] = lumaOf(r1[x + 1], g1[x + 1], b1[x + 1]);
-
-            int32_t sr = r0[x] + r0[x + 1] + r1[x] + r1[x + 1];
-            int32_t sg = g0[x] + g0[x + 1] + g1[x] + g1[x + 1];
-            int32_t sb = b0[x] + b0[x + 1] + b1[x] + b1[x + 1];
-
-            cbRow[x >> 1] = (-43 * sr - 85 * sg + 128 * sb + 512) >> 10;
-            crRow[x >> 1] = (128 * sr - 107 * sg - 21 * sb + 512) >> 10;
+            uint32_t x = cx << downsample;
+            int32_t sr = 0, sg = 0, sb = 0;
+            for (uint32_t dy = 0; dy < factor; ++dy)
+                for (uint32_t dx = 0; dx < factor; ++dx)
+                {
+                    uint32_t px = x + dx;
+                    yb[(y + dy) * 8 + px] = lumaOf(r[dy][px], g[dy][px], b[dy][px]);
+                    sr += r[dy][px];
+                    sg += g[dy][px];
+                    sb += b[dy][px];
+                }
+            int32_t rounding = 1 << (shift - 1);
+            cb[cy * 8 + cx] = (-43 * sr - 85 * sg + 128 * sb + rounding) >> shift;
+            cr[cy * 8 + cx] = (128 * sr - 107 * sg - 21 * sb + rounding) >> shift;
         }
     }
 }
@@ -423,7 +421,7 @@ static uint8_t *writeHeaders(const RpJpeg *enc, uint8_t *p, uint32_t width, uint
     *p++ = (uint8_t)(width >> 8);
     *p++ = (uint8_t)width;
     *p++ = 3;
-    *p++ = 1; *p++ = 0x22; *p++ = 0;
+    *p++ = 1; *p++ = enc->quality >= 90 ? 0x11 : 0x22; *p++ = 0;
     *p++ = 2; *p++ = 0x11; *p++ = 1;
     *p++ = 3; *p++ = 0x11; *p++ = 1;
 
@@ -464,21 +462,27 @@ uint32_t RpJpeg_Encode(const RpJpeg *enc, uint8_t *out, uint32_t outCap, const u
     uint8_t *end = out + outCap;
     BitWriter w = { writeHeaders(enc, out, width, rows), 0, 0 };
 
-    int32_t yb[4][64], cb[64], cr[64];
+    int32_t yb[64], cb[64], cr[64];
     int32_t dcY = 0, dcCb = 0, dcCr = 0;
     uint32_t rowPitch = stride * rowStep;
+    uint32_t downsample = enc->quality < 90;
+    uint32_t mcuSize = 8u << downsample;
 
-    for (uint32_t my = 0; my < rows; my += 16)
+    for (uint32_t my = 0; my < rows; my += mcuSize)
     {
-        for (uint32_t mx = 0; mx < width; mx += 16)
+        for (uint32_t mx = 0; mx < width; mx += mcuSize)
         {
             if ((uint32_t)(end - w.p) < MCU_MARGIN)
                 return 0;
 
-            loadMcu(yb, cb, cr, src + my * rowPitch + mx * bpp, rowPitch, format);
-
-            for (uint32_t i = 0; i < 4; i++)
-                dcY = encodeBlock(&w, yb[i], enc->recipY, dcY, &enc->dcY, &enc->acY);
+            for (uint32_t i = 0; i < (1u << (2 * downsample)); ++i)
+            {
+                uint32_t bx = i & 1, by = i >> 1;
+                uint32_t ci = by * 32 + bx * 4;
+                loadBlock(yb, cb + ci, cr + ci, src + (my + by * 8) * rowPitch + (mx + bx * 8) * bpp,
+                          rowPitch, format, downsample);
+                dcY = encodeBlock(&w, yb, enc->recipY, dcY, &enc->dcY, &enc->acY);
+            }
             dcCb = encodeBlock(&w, cb, enc->recipC, dcCb, &enc->dcC, &enc->acC);
             dcCr = encodeBlock(&w, cr, enc->recipC, dcCr, &enc->dcC, &enc->acC);
         }

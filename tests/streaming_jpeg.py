@@ -2,6 +2,7 @@ import ctypes
 import hashlib
 import io
 import json
+import math
 import mmap
 import os
 from pathlib import Path
@@ -12,7 +13,7 @@ import struct
 import subprocess
 
 import PIL
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw, ImageStat
 
 assert PIL.__version__ == '12.3.0', PIL.__version__
 root = Path(__file__).resolve().parents[1]
@@ -216,6 +217,57 @@ for screen_width in (400, 320):
         cases.append({'case': 'screen-format-color-rotation', 'screen_width': screen_width,
                       'jpeg_size': [240, screen_width], 'format': format_value, 'jpeg_bytes': len(jpeg),
                       'sample_max_channel_errors': errors})
+
+
+def psnr(original, decoded):
+    statistics = ImageStat.Stat(ImageChops.difference(original, decoded))
+    mse = sum(statistics.sum2) / (3 * original.width * original.height)
+    return 10 * math.log10(255 * 255 / mse) if mse else 100.0
+
+
+for screen_width in (400, 320):
+    color_pixels = Image.new('RGB', (screen_width, 240))
+    color_pixels.putdata([(255, 0, 0) if (x + y) & 1 else (0, 0, 255)
+                         for y in range(240) for x in range(screen_width)])
+    for format_value in range(5):
+        packed, stride = native_pixels(color_pixels, format_value)
+        low = encode(packed, 240, screen_width, stride, 1, format_value, quality=70)
+        high = encode(packed, 240, screen_width, stride, 1, format_value, quality=90)
+        low_image = decode(low, (240, screen_width)).transpose(Image.Transpose.ROTATE_90)
+        high_image = decode(high, (240, screen_width)).transpose(Image.Transpose.ROTATE_90)
+        low_psnr = psnr(color_pixels, low_image)
+        high_psnr = psnr(color_pixels, high_image)
+        assert low_psnr < 10 and high_psnr > 35 and high_psnr - low_psnr > 25
+        assert Image.open(io.BytesIO(low)).layer == [(1, 2, 2, 0), (2, 1, 1, 1), (3, 1, 1, 1)]
+        assert Image.open(io.BytesIO(high)).layer == [(1, 1, 1, 0), (2, 1, 1, 1), (3, 1, 1, 1)]
+        cases.append({'case': 'full-color-preserves-native-one-pixel-color-edges', 'screen_width': screen_width,
+                      'format': format_value, 'quality70_psnr_db': low_psnr, 'quality90_psnr_db': high_psnr,
+                      'quality70_bytes': len(low), 'quality90_bytes': len(high)})
+
+ui = Image.new('RGB', (400, 240), (240, 230, 190))
+ui_draw = ImageDraw.Draw(ui)
+for row in range(12):
+    color = ((230, 30, 30), (20, 100, 240), (20, 140, 30))[row % 3]
+    ui_draw.text((5, row * 19 + 2), 'HP123/456 Item ABC xyz 0123456789', fill=color)
+    ui_draw.rectangle((315, row * 19 + 2, 329, row * 19 + 16), fill=color)
+ui_packed, ui_stride = native_pixels(ui, 1)
+for quality in (70, 89, 90, 95, 100):
+    jpeg = encode(ui_packed, 240, 400, ui_stride, 1, 1, quality=quality)
+    actual = decode(jpeg, (240, 400)).transpose(Image.Transpose.ROTATE_90)
+    reference_data = io.BytesIO()
+    ui.transpose(Image.Transpose.ROTATE_270).save(reference_data, format='JPEG', quality=quality,
+                                               subsampling=0 if quality >= 90 else 2)
+    reference_jpeg = Image.open(io.BytesIO(reference_data.getvalue()))
+    actual_jpeg = Image.open(io.BytesIO(jpeg))
+    reference = reference_jpeg.convert('RGB').transpose(Image.Transpose.ROTATE_90)
+    assert actual_jpeg.quantization == reference_jpeg.quantization
+    assert actual_jpeg.layer[0][1:3] == ((1, 1) if quality >= 90 else (2, 2))
+    if quality <= 95:
+        assert psnr(ui, actual) >= psnr(ui, reference) - 1
+    (generated / ('ui-quality' + str(quality) + '.jpg')).write_bytes(jpeg)
+    cases.append({'case': 'colored-ui-matches-standard-jpeg-profile', 'quality': quality,
+                  'sampling': '444' if quality >= 90 else '420', 'jpeg_bytes': len(jpeg),
+                  'actual_psnr_db': psnr(ui, actual), 'reference_psnr_db': psnr(ui, reference)})
 
 small = Image.new('RGB', (32, 32))
 for y in range(32):
@@ -454,8 +506,8 @@ for rows in (400, 320):
         native = Buffer(len(data), data)
         retry.Retry_Init(100, 0, 0, 0, 0)
         count = retry.Retry_Run(native.pointer, rows, 720, 1)
-        assert 0 < count < capacity and retry.Retry_Attempts() == 2
-        assert [retry.Retry_History(index) for index in range(2)] == [100, 80]
+        assert 0 < count < capacity and retry.Retry_Attempts() == 3
+        assert [retry.Retry_History(index) for index in range(3)] == [100, 90, 80]
         assert retry.Retry_Quality() == 80 and retry.Retry_Guards()
         jpeg = ctypes.string_at(retry.Retry_Data(), count)
         decode(jpeg, (240, rows))
@@ -466,7 +518,7 @@ for rows in (400, 320):
         native.check()
         assert native.read() == data and retry.Retry_Guards()
         cases.append({'case': 'actual-retry-100-overflow-recovers-80-and-persists',
-                      'rows': rows, 'seed': seed, 'jpeg_bytes': count, 'attempt_qualities': [100, 80],
+                      'rows': rows, 'seed': seed, 'jpeg_bytes': count, 'attempt_qualities': [100, 90, 80],
                       'following_frame_attempt_qualities': [80]})
 
 cancel_data = random.Random(0x134).randbytes(240 * 400 * 3)
@@ -478,11 +530,12 @@ for name, controls, expected_attempts in (
     assert retry.Retry_Run(native.pointer, 400, 720, 1) == 0
     assert retry.Retry_Attempts() == expected_attempts and retry.Retry_Guards()
     cases.append({'case': 'actual-retry-' + name, 'encode_attempts': expected_attempts})
-for quality, history in ((100, [100, 80, 40, 1]), (80, [80, 40, 1]), (40, [40, 1]), (1, [1])):
+for quality, history in ((100, [100, 90, 80, 40]), (90, [90, 80, 40, 1]), (80, [80, 40, 1]), (40, [40, 1]), (1, [1])):
     retry.Retry_Init(quality, 0, 0, 0, 0)
     assert retry.Retry_Run(native.pointer, 400, 720, 5) == 0
     assert retry.Retry_Attempts() == len(history) and retry.Retry_Guards()
     assert [retry.Retry_History(index) for index in range(len(history))] == history
+    assert retry.Retry_ScreenQuality(1) == 1
     cases.append({'case': 'actual-retry-final-failure-bounded', 'start_quality': quality,
                   'attempt_qualities': history})
 
@@ -514,7 +567,7 @@ for rows in (400, 320):
     simple = bytes((32, 64, 96)) * (240 * rows)
     screen = int(rows == 400)
     retry.Retry_Init(100, 0, 0, 0, 0)
-    assert recovery_run(noise, rows, 0, [100, 80], 2) > capacity // 4
+    assert recovery_run(noise, rows, 0, [100, 90, 80], 3) > capacity // 4
     for now in (500000, 1000000, 1500000, 1999999):
         assert recovery_run(simple, rows, now, [80], 0) < capacity // 4
     assert retry.Retry_SmallFrames(screen) == 3
@@ -522,11 +575,11 @@ for rows in (400, 320):
     assert retry.Retry_ScreenQuality(screen) == 100 and retry.Retry_SmallFrames(screen) == 0
     recovery_run(simple, rows, 8000000, [100], 0)
     cases.append({'case': 'actual-recovery-complex-to-simple-both-screens', 'rows': rows,
-                  'first_attempts': [100, 80], 'pre_deadline_attempts': [80], 'recovered_attempts': [100],
+                  'first_attempts': [100, 90, 80], 'pre_deadline_attempts': [80], 'recovered_attempts': [100],
                   'minimum_small_frames': 3, 'cooldown_us': 2000000})
 
     retry.Retry_Init(100, 0, 0, 0, 0)
-    recovery_run(noise, rows, 0, [100, 80])
+    recovery_run(noise, rows, 0, [100, 90, 80])
     for now in (100000, 200000, 300000):
         recovery_run(simple, rows, now, [80])
     recovery_run(noise, rows, 1900000, [80])
@@ -537,7 +590,7 @@ for rows in (400, 320):
     cases.append({'case': 'actual-recovery-large-frame-clears-small-history', 'rows': rows})
 
     retry.Retry_Init(100, 0, 0, 0, 0)
-    recovery_run(noise, rows, 0, [100, 80])
+    recovery_run(noise, rows, 0, [100, 90, 80])
     for index in range(1, 31):
         recovery_run(noise, rows, index * 500000, [80], 0)
     assert retry.Retry_SmallFrames(screen) == 0
@@ -546,16 +599,17 @@ for rows in (400, 320):
 
 rows = 400
 simple = bytes((32, 64, 96)) * (240 * rows)
-for requested, fallback in ((100, 80), (79, 40), (70, 40), (40, 1)):
+for requested, fallback in ((100, 80), (90, 80), (79, 40), (70, 40), (40, 1)):
+    attempt_history = [100, 90, 80] if requested == 100 else [requested, fallback]
     retry.Retry_Init(requested, 0, 0, 0, 0)
     retry.Retry_FailAbove(fallback)
-    recovery_run(simple, rows, 0, [requested, fallback])
+    recovery_run(simple, rows, 0, attempt_history)
     for now in (100000, 200000, 1999999):
         recovery_run(simple, rows, now, [fallback], 0)
-    recovery_run(simple, rows, 2000000, [requested, fallback], 2)
+    recovery_run(simple, rows, 2000000, attempt_history, len(attempt_history))
     for now in (2100000, 2200000, 3999999):
         recovery_run(simple, rows, now, [fallback], 0)
-    recovery_run(simple, rows, 4000000, [requested, fallback], 2)
+    recovery_run(simple, rows, 4000000, attempt_history, len(attempt_history))
     retry.Retry_FailAbove(0)
     for now in (4100000, 4200000):
         recovery_run(simple, rows, now, [fallback])
@@ -566,23 +620,25 @@ for requested, fallback in ((100, 80), (79, 40), (70, 40), (40, 1)):
 
 retry.Retry_Init(100, 0, 0, 0, 0)
 retry.Retry_FailAbove(1)
-recovery_run(simple, rows, 0, [100, 80, 40, 1], 4)
-for now in (100000, 200000):
+assert recovery_run(simple, rows, 0, [100, 90, 80, 40], 5) == 0
+assert retry.Retry_ScreenQuality(1) == 1
+for now in (100000, 200000, 300000):
     recovery_run(simple, rows, now, [1], 0)
-recovery_run(simple, rows, 2000000, [100, 80, 40, 1], 4)
-for now in (2100000, 2200000):
+assert recovery_run(simple, rows, 2000000, [100, 90, 80, 40], 5) == 0
+for now in (2100000, 2200000, 2300000):
     recovery_run(simple, rows, now, [1], 0)
 retry.Retry_FailAbove(0)
 recovery_run(simple, rows, 3600000000, [100], 1)
 cases.append({'case': 'actual-recovery-four-attempt-bound-and-long-idle-single-probe',
-              'failed_probe_attempts': [100, 80, 40, 1], 'long_idle_probe_attempts': [100]})
+              'failed_probe_attempts': [100, 90, 80, 40], 'following_frame_quality': 1,
+              'long_idle_probe_attempts': [100]})
 
 ticks_per_us = 268123480 // 1000000
 cooldown_ticks = 2000000 * ticks_per_us
 for origin in (0, 2 ** 32 - cooldown_ticks // 2, 13 * 2 ** 32 - 1):
     retry.Retry_Init(100, 0, 0, 0, 0)
     retry.Retry_FailAbove(80)
-    recovery_run(simple, rows, origin, [100, 80], ticks=True)
+    recovery_run(simple, rows, origin, [100, 90, 80], ticks=True)
     for offset in (1, 2, cooldown_ticks - 1):
         recovery_run(simple, rows, origin + offset, [80], 0, ticks=True)
     retry.Retry_FailAbove(0)
@@ -593,7 +649,7 @@ for origin in (0, 2 ** 32 - cooldown_ticks // 2, 13 * 2 ** 32 - 1):
 retry.Retry_Init(100, 0, 0, 0, 0)
 retry.Retry_FailAbove(80)
 for now in (0, 1, 2):
-    recovery_run(simple, rows, now, [100, 80] if now == 0 else [80], ticks=True)
+    recovery_run(simple, rows, now, [100, 90, 80] if now == 0 else [80], ticks=True)
 retry.Retry_FailAbove(0)
 recovery_run(simple, rows, 120 * 2 ** 32, [80], 0, ticks=True)
 recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks - 1, [80], 0, ticks=True)
@@ -606,7 +662,7 @@ cases.append({'case': 'actual-recovery-long-idle-full-wrap-defers-at-most-two-se
 retry.Retry_Init(100, 0, 0, 0, 0)
 retry.Retry_FailAbove(80)
 for now in (0, 100000, 200000):
-    recovery_run(simple, rows, now, [100, 80] if now == 0 else [80])
+    recovery_run(simple, rows, now, [100, 90, 80] if now == 0 else [80])
 assert retry.Retry_Settings(100, 0x100, 1048576, 1)
 assert retry.Retry_SmallFrames(1) == 3 and retry.Retry_ScreenQuality(1) == 80
 recovery_run(simple, rows, 1999999, [80])
@@ -616,7 +672,7 @@ recovery_run(simple, rows, 8000000, [30])
 assert retry.Retry_SmallFrames(1) == 0
 assert retry.Retry_Settings(100, 0x102, 2097152, 1)
 assert retry.Retry_ScreenQuality(1) == 100 and retry.Retry_SmallFrames(1) == 0
-recovery_run(simple, rows, 9000000, [100, 80])
+recovery_run(simple, rows, 9000000, [100, 90, 80])
 assert not retry.Retry_Settings(100, 0x102, 2097152, 0)
 assert retry.Retry_ScreenQuality(1) == 80
 cases.append({'case': 'actual-settings-quality-change-replaces-effective-quality-and-lower-ceiling-wins',
@@ -625,7 +681,7 @@ cases.append({'case': 'actual-settings-quality-change-replaces-effective-quality
 retry.Retry_Init(100, 0, 0, 0, 0)
 retry.Retry_FailAbove(80)
 for now in (0, 100000, 200000):
-    recovery_run(simple, rows, now, [100, 80] if now == 0 else [80])
+    recovery_run(simple, rows, now, [100, 90, 80] if now == 0 else [80])
 assert retry.Retry_Settings(70, 0x102, 2097152, 1)
 retry.Retry_FailAbove(40)
 recovery_run(simple, rows, 10000000, [70, 40])
@@ -640,7 +696,7 @@ cases.append({'case': 'actual-settings-new-fallback-replaces-stale-recovery-hist
 retry.Retry_Init(100, 0, 0, 0, 0)
 noise = random.Random(0x134).randbytes(240 * 400 * 3)
 bottom_simple = bytes((32, 64, 96)) * (240 * 320)
-recovery_run(noise, 400, 0, [100, 80])
+recovery_run(noise, 400, 0, [100, 90, 80])
 for now in (100000, 200000, 300000, 3000000):
     recovery_run(bottom_simple, 320, now, [100])
 assert retry.Retry_ScreenQuality(1) == 80 and retry.Retry_SmallFrames(1) == 0
@@ -652,16 +708,16 @@ for stop, pre in ((1, 0), (0, 1)):
     retry.Retry_Init(100, 0, 0, 0, 0)
     retry.Retry_FailAbove(80)
     for now in (0, 100000, 200000):
-        recovery_run(simple, rows, now, [100, 80] if now == 0 else [80])
+        recovery_run(simple, rows, now, [100, 90, 80] if now == 0 else [80])
     retry.Retry_Stop(stop, pre, 0, 0)
     assert recovery_run(simple, rows, 2000000, [], 0) == 0
     assert retry.Retry_ScreenQuality(1) == 80 and retry.Retry_SmallFrames(1) == 3
     retry.Retry_Stop(0, 0, stop, pre)
     assert recovery_run(simple, rows, 2000000, [100], 2) == 0
     retry.Retry_Stop(0, 0, 0, 0)
-    recovery_run(simple, rows, 2000001, [80], 0)
+    recovery_run(simple, rows, 2000001, [90, 80], 1)
     cases.append({'case': 'actual-recovery-cancellation-before-and-during-probe', 'stop': stop,
-                  'preterminate': pre, 'subsequent_attempts': [80]})
+                  'preterminate': pre, 'subsequent_attempts': [90, 80]})
 
 for requested in (1, 40, 79, 100):
     retry.Retry_Init(requested, 0, 0, 0, 0)
