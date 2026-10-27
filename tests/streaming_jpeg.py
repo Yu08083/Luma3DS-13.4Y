@@ -408,6 +408,7 @@ int Retry_Quality(void) { return enc.jpeg.quality; }
 const u8 *Retry_Data(void) { return guarded.slot.data; }
 void Retry_Retrace(void) { attempts=qualityChanges=0;memset(history,0,sizeof(history)); }
 void Retry_Time(u64 microseconds) { retryNow=microseconds*TICKS_PER_US; }
+void Retry_Ticks(u64 ticks) { retryNow=ticks; }
 void Retry_Stop(int stop,int pre,unsigned afterStop,unsigned afterPre)
 {
     stopRequested=stop!=0;preTerminationRequested=pre!=0;stopAfter=afterStop;preAfter=afterPre;
@@ -420,6 +421,7 @@ int Retry_Settings(unsigned quality,unsigned mode,unsigned qos,unsigned ip)
 unsigned Retry_ScreenQuality(unsigned screen) { return enc.screens[screen!=0].quality; }
 unsigned Retry_SmallFrames(unsigned screen) { return enc.screens[screen!=0].smallFrames; }
 unsigned Retry_QualityChanges(void) { return qualityChanges; }
+unsigned Retry_ScreenBytes(void) { return sizeof(ScreenState); }
 void Retry_FailAbove(unsigned quality) { failAboveQuality=quality; }
 int Retry_Guards(void)
 {
@@ -440,6 +442,7 @@ retry.Retry_Run.restype = ctypes.c_uint32
 retry.Retry_History.argtypes = [ctypes.c_uint]
 retry.Retry_Data.restype = ctypes.c_void_p
 retry.Retry_Time.argtypes = [ctypes.c_uint64]
+retry.Retry_Ticks.argtypes = [ctypes.c_uint64]
 retry.Retry_Stop.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
 retry.Retry_Settings.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
 retry.Retry_ScreenQuality.argtypes = [ctypes.c_uint]
@@ -484,8 +487,11 @@ for quality, history in ((100, [100, 80, 40, 1]), (80, [80, 40, 1]), (40, [40, 1
                   'attempt_qualities': history})
 
 
-def recovery_run(data, rows, now, expected, changes=None):
-    retry.Retry_Time(now)
+def recovery_run(data, rows, now, expected, changes=None, ticks=False):
+    if ticks:
+        retry.Retry_Ticks(now)
+    else:
+        retry.Retry_Time(now)
     retry.Retry_Retrace()
     native = Buffer(len(data), data)
     size = retry.Retry_Run(native.pointer, rows, 720, 1)
@@ -570,6 +576,32 @@ retry.Retry_FailAbove(0)
 recovery_run(simple, rows, 3600000000, [100], 1)
 cases.append({'case': 'actual-recovery-four-attempt-bound-and-long-idle-single-probe',
               'failed_probe_attempts': [100, 80, 40, 1], 'long_idle_probe_attempts': [100]})
+
+ticks_per_us = 268123480 // 1000000
+cooldown_ticks = 2000000 * ticks_per_us
+for origin in (0, 2 ** 32 - cooldown_ticks // 2, 13 * 2 ** 32 - 1):
+    retry.Retry_Init(100, 0, 0, 0, 0)
+    retry.Retry_FailAbove(80)
+    recovery_run(simple, rows, origin, [100, 80], ticks=True)
+    for offset in (1, 2, cooldown_ticks - 1):
+        recovery_run(simple, rows, origin + offset, [80], 0, ticks=True)
+    retry.Retry_FailAbove(0)
+    recovery_run(simple, rows, origin + cooldown_ticks, [100], 1, ticks=True)
+    cases.append({'case': 'actual-recovery-unsigned-tick-wrap-exact-cooldown',
+                  'failure_tick': origin, 'cooldown_ticks': cooldown_ticks})
+
+retry.Retry_Init(100, 0, 0, 0, 0)
+retry.Retry_FailAbove(80)
+for now in (0, 1, 2):
+    recovery_run(simple, rows, now, [100, 80] if now == 0 else [80], ticks=True)
+retry.Retry_FailAbove(0)
+recovery_run(simple, rows, 120 * 2 ** 32, [80], 0, ticks=True)
+recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks - 1, [80], 0, ticks=True)
+recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks, [100], 1, ticks=True)
+assert retry.Retry_ScreenBytes() == 32
+cases.append({'case': 'actual-recovery-long-idle-full-wrap-defers-at-most-two-seconds',
+              'idle_ticks': 120 * 2 ** 32, 'maximum_deferral_ticks': cooldown_ticks,
+              'screen_state_bytes': retry.Retry_ScreenBytes()})
 
 retry.Retry_Init(100, 0, 0, 0, 0)
 retry.Retry_FailAbove(80)

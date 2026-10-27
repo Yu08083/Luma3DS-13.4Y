@@ -555,7 +555,7 @@ typedef struct ScreenState
     u8 frameId;
     u8 quality;
     u8 smallFrames;
-    u64 qualityRetryTick;
+    u32 qualityFailureTick;
 } ScreenState;
 
 typedef struct EncoderState
@@ -920,7 +920,7 @@ static bool takeSettings(void)
             {
                 enc.screens[screen].quality = (u8)quality;
                 enc.screens[screen].smallFrames = 0;
-                enc.screens[screen].qualityRetryTick = 0;
+                enc.screens[screen].qualityFailureTick = 0;
             }
         }
     }
@@ -968,9 +968,9 @@ static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *sc
 {
     if (stopRequested || preTerminationRequested)
         return 0;
-    u64 now = svcGetSystemTick();
+    u32 now = (u32)svcGetSystemTick();
     int quality = screen->quality;
-    if (screen->smallFrames >= 3 && now >= screen->qualityRetryTick)
+    if (screen->smallFrames >= 3 && now - screen->qualityFailureTick >= (u32)(QUALITY_RECOVERY_US * TICKS_PER_US))
         quality = enc.requestedQuality;
     if (enc.jpeg.quality != quality)
         RpJpeg_SetQuality(&enc.jpeg, quality);
@@ -991,7 +991,7 @@ static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *sc
             return size;
         }
         screen->smallFrames = 0;
-        screen->qualityRetryTick = now + (u64)QUALITY_RECOVERY_US * TICKS_PER_US;
+        screen->qualityFailureTick = now;
         if (enc.jpeg.quality <= 1)
             break;
         quality = enc.jpeg.quality > 80 ? 80 : enc.jpeg.quality > 40 ? 40 : 1;
