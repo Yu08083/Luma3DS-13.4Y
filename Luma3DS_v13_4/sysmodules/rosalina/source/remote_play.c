@@ -917,11 +917,7 @@ static bool takeSettings(void)
         {
             enc.requestedQuality = (u8)quality;
             for (u32 screen = 0; screen < 2; ++screen)
-            {
                 enc.screens[screen].quality = (u8)quality;
-                enc.screens[screen].smallFrames = 0;
-                enc.screens[screen].qualityFailureTick = 0;
-            }
         }
     }
     return true;
@@ -966,7 +962,7 @@ static int pickScreen(void)
 
 static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *screen)
 {
-    if (stopRequested || preTerminationRequested)
+    if (stopRequested | preTerminationRequested)
         return 0;
     u32 now = (u32)svcGetSystemTick();
     int quality = screen->quality;
@@ -974,14 +970,14 @@ static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *sc
         quality = enc.requestedQuality;
     if (enc.jpeg.quality != quality)
         RpJpeg_SetQuality(&enc.jpeg, quality);
-    for (u32 attempt = 0; attempt < 4 && !stopRequested && !preTerminationRequested; ++attempt)
+    for (u32 attempt = 0; attempt < 4 && !(stopRequested | preTerminationRequested); ++attempt)
     {
         u32 size = RpJpeg_Encode(&enc.jpeg, slot->data, JPEG_SLOT_CAP, capture->pixels,
             CAPTURE_CAP, 240, capture->rows, capture->pitch, 1, capture->format);
         if (size != 0)
         {
-            screen->quality = (u8)enc.jpeg.quality;
-            if (enc.jpeg.quality < enc.requestedQuality && size <= JPEG_SLOT_CAP / 4)
+            screen->quality = (u8)quality;
+            if (quality < enc.requestedQuality && size <= JPEG_SLOT_CAP / 4)
             {
                 if (screen->smallFrames < 3)
                     ++screen->smallFrames;
@@ -992,9 +988,9 @@ static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *sc
         }
         screen->smallFrames = 0;
         screen->qualityFailureTick = now;
-        if (enc.jpeg.quality <= 1)
+        if (quality <= 1)
             break;
-        quality = enc.jpeg.quality > 80 ? 80 : enc.jpeg.quality > 40 ? 40 : 1;
+        quality = quality > 80 ? 80 : quality > 40 ? 40 : 1;
         RpJpeg_SetQuality(&enc.jpeg, quality);
         screen->quality = (u8)quality;
     }

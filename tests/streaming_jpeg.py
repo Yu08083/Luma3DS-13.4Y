@@ -611,16 +611,31 @@ assert retry.Retry_Settings(100, 0x100, 1048576, 1)
 assert retry.Retry_SmallFrames(1) == 3 and retry.Retry_ScreenQuality(1) == 80
 recovery_run(simple, rows, 1999999, [80])
 assert retry.Retry_Settings(30, 0x102, 2097152, 1)
-assert retry.Retry_SmallFrames(1) == 0 and retry.Retry_SmallFrames(0) == 0
 assert retry.Retry_ScreenQuality(1) == 30 and retry.Retry_ScreenQuality(0) == 30
 recovery_run(simple, rows, 8000000, [30])
+assert retry.Retry_SmallFrames(1) == 0
 assert retry.Retry_Settings(100, 0x102, 2097152, 1)
 assert retry.Retry_ScreenQuality(1) == 100 and retry.Retry_SmallFrames(1) == 0
 recovery_run(simple, rows, 9000000, [100, 80])
 assert not retry.Retry_Settings(100, 0x102, 2097152, 0)
 assert retry.Retry_ScreenQuality(1) == 80
-cases.append({'case': 'actual-settings-only-quality-change-resets-recovery-and-lower-ceiling-wins',
+cases.append({'case': 'actual-settings-quality-change-replaces-effective-quality-and-lower-ceiling-wins',
               'lowered_quality': 30, 'mode_qos_changes_preserve_cooldown': True})
+
+retry.Retry_Init(100, 0, 0, 0, 0)
+retry.Retry_FailAbove(80)
+for now in (0, 100000, 200000):
+    recovery_run(simple, rows, now, [100, 80] if now == 0 else [80])
+assert retry.Retry_Settings(70, 0x102, 2097152, 1)
+retry.Retry_FailAbove(40)
+recovery_run(simple, rows, 10000000, [70, 40])
+for now in (10100000, 10200000, 11999999):
+    recovery_run(simple, rows, now, [40])
+retry.Retry_FailAbove(0)
+recovery_run(simple, rows, 12000000, [70])
+cases.append({'case': 'actual-settings-new-fallback-replaces-stale-recovery-history',
+              'old_requested': 100, 'new_requested': 70, 'new_fallback': 40,
+              'new_failed_tick_us': 10000000, 'earliest_new_probe_us': 12000000})
 
 retry.Retry_Init(100, 0, 0, 0, 0)
 noise = random.Random(0x134).randbytes(240 * 400 * 3)
