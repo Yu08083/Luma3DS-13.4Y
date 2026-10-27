@@ -57,6 +57,7 @@ extern bool preTerminationRequested;
 #define FRAME_POLL_NS      (1000 * 1000LL)
 #define SAME_FRAME_RESEND_US 500000
 #define MAX_COPY_RETRIES   2
+#define QUALITY_RECOVERY_US 2000000
 #define HASH_SEED          0x811C9DC5u
 
 #define VIDEO_THREAD_CORE  3
@@ -552,6 +553,9 @@ typedef struct ScreenState
     u32 lastHash;
     bool haveHash;
     u8 frameId;
+    u8 quality;
+    u8 smallFrames;
+    u64 qualityRetryTick;
 } ScreenState;
 
 typedef struct EncoderState
@@ -560,6 +564,7 @@ typedef struct EncoderState
     u32 generation;
     u32 destIp;
     bool topPriority;
+    u8 requestedQuality;
     u32 priorityFactor;
     u64 packetIntervalTicks;
     ScreenState screens[2];
@@ -908,7 +913,16 @@ static bool takeSettings(void)
         enc.topPriority = ((mode >> 8) & 0xFF) != 0;
         enc.priorityFactor = mode & 0xFF;
         enc.packetIntervalTicks = (u64)SYSCLOCK_ARM11 * VIDEO_PACKET_SIZE / qos;
-        RpJpeg_SetQuality(&enc.jpeg, (int)quality);
+        if (quality != enc.requestedQuality)
+        {
+            enc.requestedQuality = (u8)quality;
+            for (u32 screen = 0; screen < 2; ++screen)
+            {
+                enc.screens[screen].quality = (u8)quality;
+                enc.screens[screen].smallFrames = 0;
+                enc.screens[screen].qualityRetryTick = 0;
+            }
+        }
     }
     return true;
 }
@@ -950,18 +964,39 @@ static int pickScreen(void)
     return -1;
 }
 
-static u32 encodeCapture(JpegSlot *slot, const Capture *capture)
+static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *screen)
 {
+    if (stopRequested || preTerminationRequested)
+        return 0;
+    u64 now = svcGetSystemTick();
+    int quality = screen->quality;
+    if (screen->smallFrames >= 3 && now >= screen->qualityRetryTick)
+        quality = enc.requestedQuality;
+    if (enc.jpeg.quality != quality)
+        RpJpeg_SetQuality(&enc.jpeg, quality);
     for (u32 attempt = 0; attempt < 4 && !stopRequested && !preTerminationRequested; ++attempt)
     {
         u32 size = RpJpeg_Encode(&enc.jpeg, slot->data, JPEG_SLOT_CAP, capture->pixels,
             CAPTURE_CAP, 240, capture->rows, capture->pitch, 1, capture->format);
         if (size != 0)
+        {
+            screen->quality = (u8)enc.jpeg.quality;
+            if (enc.jpeg.quality < enc.requestedQuality && size <= JPEG_SLOT_CAP / 4)
+            {
+                if (screen->smallFrames < 3)
+                    ++screen->smallFrames;
+            }
+            else
+                screen->smallFrames = 0;
             return size;
+        }
+        screen->smallFrames = 0;
+        screen->qualityRetryTick = now + (u64)QUALITY_RECOVERY_US * TICKS_PER_US;
         if (enc.jpeg.quality <= 1)
             break;
-        int quality = enc.jpeg.quality > 80 ? 80 : enc.jpeg.quality > 40 ? 40 : 1;
+        quality = enc.jpeg.quality > 80 ? 80 : enc.jpeg.quality > 40 ? 40 : 1;
         RpJpeg_SetQuality(&enc.jpeg, quality);
+        screen->quality = (u8)quality;
     }
     return 0;
 }
@@ -1027,7 +1062,7 @@ static void encoderThreadMain(void)
             continue;
         }
 
-        u32 size = encodeCapture(slot, &c);
+        u32 size = encodeCapture(slot, &c, sc);
         u64 encoded = svcGetSystemTick();
         encoderSpent(ENC_BUSY, frameStart, encoded);
 

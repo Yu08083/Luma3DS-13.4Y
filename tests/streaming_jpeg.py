@@ -339,10 +339,14 @@ def declaration(start, closing):
 
 
 retry_helper = declaration('static u32 encodeCapture(', '\n}')
+settings_helper = declaration('static bool takeSettings(', '\n}')
 slot_type = declaration('typedef struct JpegSlot\n', '} JpegSlot;')
 capture_type = declaration('typedef struct Capture\n', '} Capture;')
+screen_type = declaration('typedef struct ScreenState\n', '} ScreenState;')
+encoder_type = declaration('typedef struct EncoderState\n', '} EncoderState;')
 capacity = int(re.search(r'#define JPEG_SLOT_CAP\s+\((\d+) \* 1024\)', remote_source)[1]) * 1024
 assert capacity == 128 * 1024
+assert int(re.search(r'#define QUALITY_RECOVERY_US\s+(\d+)', remote_source)[1]) == 2000000
 retry_prefix = r'''
 #include <stdbool.h>
 #include <stdint.h>
@@ -353,9 +357,21 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 #define JPEG_SLOT_CAP (128 * 1024)
 #define CAPTURE_CAP 384000
-static struct { RpJpeg jpeg; } enc;
+#define VIDEO_PACKET_SIZE 1448
+#define SYSCLOCK_ARM11 268123480ULL
+#define TICKS_PER_US (SYSCLOCK_ARM11 / 1000000)
+#define QUALITY_RECOVERY_US 2000000
+static u64 retryNow;
+static u64 svcGetSystemTick(void) { return retryNow; }
+static u32 settingsLock,settingsGeneration,viewerIp,settingMode,settingQuality,settingQos;
+static void LightLock_Lock(u32 *lock) { ++*lock; }
+static void LightLock_Unlock(u32 *lock) { --*lock; }
 static bool stopRequested,preTerminationRequested;
-static unsigned attempts,history[8],stopAfter,preAfter;
+static unsigned attempts,history[8],stopAfter,preAfter,qualityChanges,failAboveQuality;
+static void tracedQuality(RpJpeg *encoder,int quality)
+{
+    ++qualityChanges;RpJpeg_SetQuality(encoder,quality);
+}
 static u32 tracedEncode(const RpJpeg *encoder,u8 *out,u32 outCap,const u8 *src,u32 srcSize,
                         u32 width,u32 rows,u32 stride,u32 step,int format)
 {
@@ -364,9 +380,11 @@ static u32 tracedEncode(const RpJpeg *encoder,u8 *out,u32 outCap,const u8 *src,u
     u32 size=RpJpeg_Encode(encoder,out,outCap,src,srcSize,width,rows,stride,step,format);
     if(stopAfter&&attempts==stopAfter)stopRequested=true;
     if(preAfter&&attempts==preAfter)preTerminationRequested=true;
+    if(failAboveQuality&&(unsigned)encoder->quality>failAboveQuality)return 0;
     return size;
 }
 #define RpJpeg_Encode tracedEncode
+#define RpJpeg_SetQuality tracedQuality
 '''
 retry_suffix = r'''
 #undef RpJpeg_Encode
@@ -374,19 +392,35 @@ static struct { u8 prefix[64]; JpegSlot slot; u8 suffix[64]; } guarded;
 void Retry_Init(int quality,int stop,int pre,unsigned afterStop,unsigned afterPre)
 {
     memset(&guarded,0xA7,sizeof(guarded));
-    attempts=0;memset(history,0,sizeof(history));stopAfter=afterStop;preAfter=afterPre;
-    stopRequested=stop!=0;preTerminationRequested=pre!=0;RpJpeg_SetQuality(&enc.jpeg,quality);
+    memset(&enc,0,sizeof(enc));retryNow=0;settingsGeneration=1;viewerIp=1;
+    settingMode=0x102;settingQuality=quality;settingQos=2097152;takeSettings();
+    attempts=qualityChanges=failAboveQuality=0;memset(history,0,sizeof(history));stopAfter=afterStop;preAfter=afterPre;
+    stopRequested=stop!=0;preTerminationRequested=pre!=0;
 }
 u32 Retry_Run(const u8 *pixels,u32 rows,u32 pitch,int format)
 {
     Capture capture={0};capture.pixels=pixels;capture.rows=rows;capture.pitch=pitch;capture.format=format;
-    return encodeCapture(&guarded.slot,&capture);
+    return encodeCapture(&guarded.slot,&capture,&enc.screens[rows==400]);
 }
 unsigned Retry_Attempts(void) { return attempts; }
 unsigned Retry_History(unsigned index) { return index<8?history[index]:0; }
 int Retry_Quality(void) { return enc.jpeg.quality; }
 const u8 *Retry_Data(void) { return guarded.slot.data; }
-void Retry_Retrace(void) { attempts=0;memset(history,0,sizeof(history)); }
+void Retry_Retrace(void) { attempts=qualityChanges=0;memset(history,0,sizeof(history)); }
+void Retry_Time(u64 microseconds) { retryNow=microseconds*TICKS_PER_US; }
+void Retry_Stop(int stop,int pre,unsigned afterStop,unsigned afterPre)
+{
+    stopRequested=stop!=0;preTerminationRequested=pre!=0;stopAfter=afterStop;preAfter=afterPre;
+}
+int Retry_Settings(unsigned quality,unsigned mode,unsigned qos,unsigned ip)
+{
+    settingQuality=quality;settingMode=mode;settingQos=qos;viewerIp=ip;++settingsGeneration;
+    return takeSettings();
+}
+unsigned Retry_ScreenQuality(unsigned screen) { return enc.screens[screen!=0].quality; }
+unsigned Retry_SmallFrames(unsigned screen) { return enc.screens[screen!=0].smallFrames; }
+unsigned Retry_QualityChanges(void) { return qualityChanges; }
+void Retry_FailAbove(unsigned quality) { failAboveQuality=quality; }
 int Retry_Guards(void)
 {
     for(unsigned i=0;i<64;++i)if(guarded.prefix[i]!=0xA7||guarded.suffix[i]!=0xA7)return 0;
@@ -394,7 +428,7 @@ int Retry_Guards(void)
 }
 '''
 retry_c = generated / 'retry.c'
-retry_c.write_bytes((retry_prefix + slot_type + capture_type + retry_helper + retry_suffix).encode())
+retry_c.write_bytes((retry_prefix + screen_type + encoder_type + '\nstatic EncoderState enc;\n' + slot_type + capture_type + settings_helper + retry_helper + retry_suffix).encode())
 retry_path = generated / ('retry.dll' if os.name == 'nt' else 'retry.so')
 subprocess.run([compiler, '-shared', '-fPIC', '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror',
                 '-I' + str(module / 'include'), str(source_path), str(retry_c), '-o', str(retry_path)],
@@ -405,6 +439,12 @@ retry.Retry_Run.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, c
 retry.Retry_Run.restype = ctypes.c_uint32
 retry.Retry_History.argtypes = [ctypes.c_uint]
 retry.Retry_Data.restype = ctypes.c_void_p
+retry.Retry_Time.argtypes = [ctypes.c_uint64]
+retry.Retry_Stop.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
+retry.Retry_Settings.argtypes = [ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint]
+retry.Retry_ScreenQuality.argtypes = [ctypes.c_uint]
+retry.Retry_SmallFrames.argtypes = [ctypes.c_uint]
+retry.Retry_FailAbove.argtypes = [ctypes.c_uint]
 for rows in (400, 320):
     for seed in (0x134, 0x256, 0x134001):
         data = random.Random(seed).randbytes(240 * rows * 3)
@@ -442,6 +482,153 @@ for quality, history in ((100, [100, 80, 40, 1]), (80, [80, 40, 1]), (40, [40, 1
     assert [retry.Retry_History(index) for index in range(len(history))] == history
     cases.append({'case': 'actual-retry-final-failure-bounded', 'start_quality': quality,
                   'attempt_qualities': history})
+
+
+def recovery_run(data, rows, now, expected, changes=None):
+    retry.Retry_Time(now)
+    retry.Retry_Retrace()
+    native = Buffer(len(data), data)
+    size = retry.Retry_Run(native.pointer, rows, 720, 1)
+    history = [retry.Retry_History(index) for index in range(retry.Retry_Attempts())]
+    assert history == expected, (now, rows, history, expected)
+    assert retry.Retry_Guards()
+    native.check()
+    assert native.read() == data
+    if changes is not None:
+        assert retry.Retry_QualityChanges() == changes
+    if size:
+        assert size < capacity
+        jpeg = ctypes.string_at(retry.Retry_Data(), size)
+        decode(jpeg, (240, rows))
+    return size
+
+
+for rows in (400, 320):
+    noise = random.Random(0x134).randbytes(240 * rows * 3)
+    simple = bytes((32, 64, 96)) * (240 * rows)
+    screen = int(rows == 400)
+    retry.Retry_Init(100, 0, 0, 0, 0)
+    assert recovery_run(noise, rows, 0, [100, 80], 2) > capacity // 4
+    for now in (500000, 1000000, 1500000, 1999999):
+        assert recovery_run(simple, rows, now, [80], 0) < capacity // 4
+    assert retry.Retry_SmallFrames(screen) == 3
+    recovery_run(simple, rows, 2000000, [100], 1)
+    assert retry.Retry_ScreenQuality(screen) == 100 and retry.Retry_SmallFrames(screen) == 0
+    recovery_run(simple, rows, 8000000, [100], 0)
+    cases.append({'case': 'actual-recovery-complex-to-simple-both-screens', 'rows': rows,
+                  'first_attempts': [100, 80], 'pre_deadline_attempts': [80], 'recovered_attempts': [100],
+                  'minimum_small_frames': 3, 'cooldown_us': 2000000})
+
+    retry.Retry_Init(100, 0, 0, 0, 0)
+    recovery_run(noise, rows, 0, [100, 80])
+    for now in (100000, 200000, 300000):
+        recovery_run(simple, rows, now, [80])
+    recovery_run(noise, rows, 1900000, [80])
+    assert retry.Retry_SmallFrames(screen) == 0
+    for now in (2000000, 2100000, 2200000):
+        recovery_run(simple, rows, now, [80])
+    recovery_run(simple, rows, 2300000, [100])
+    cases.append({'case': 'actual-recovery-large-frame-clears-small-history', 'rows': rows})
+
+    retry.Retry_Init(100, 0, 0, 0, 0)
+    recovery_run(noise, rows, 0, [100, 80])
+    for index in range(1, 31):
+        recovery_run(noise, rows, index * 500000, [80], 0)
+    assert retry.Retry_SmallFrames(screen) == 0
+    cases.append({'case': 'actual-recovery-continuous-noise-no-high-quality-retry', 'rows': rows,
+                  'seconds': 15, 'following_encodes': 30, 'following_high_quality_attempts': 0})
+
+rows = 400
+simple = bytes((32, 64, 96)) * (240 * rows)
+for requested, fallback in ((100, 80), (79, 40), (70, 40), (40, 1)):
+    retry.Retry_Init(requested, 0, 0, 0, 0)
+    retry.Retry_FailAbove(fallback)
+    recovery_run(simple, rows, 0, [requested, fallback])
+    for now in (100000, 200000, 1999999):
+        recovery_run(simple, rows, now, [fallback], 0)
+    recovery_run(simple, rows, 2000000, [requested, fallback], 2)
+    for now in (2100000, 2200000, 3999999):
+        recovery_run(simple, rows, now, [fallback], 0)
+    recovery_run(simple, rows, 4000000, [requested, fallback], 2)
+    retry.Retry_FailAbove(0)
+    for now in (4100000, 4200000):
+        recovery_run(simple, rows, now, [fallback])
+    recovery_run(simple, rows, 6000000, [requested])
+    cases.append({'case': 'actual-recovery-injected-overflow-probes-wall-clock-bounded',
+                  'requested': requested, 'fallback': fallback, 'failed_probe_us': [2000000, 4000000],
+                  'successful_probe_us': 6000000})
+
+retry.Retry_Init(100, 0, 0, 0, 0)
+retry.Retry_FailAbove(1)
+recovery_run(simple, rows, 0, [100, 80, 40, 1], 4)
+for now in (100000, 200000):
+    recovery_run(simple, rows, now, [1], 0)
+recovery_run(simple, rows, 2000000, [100, 80, 40, 1], 4)
+for now in (2100000, 2200000):
+    recovery_run(simple, rows, now, [1], 0)
+retry.Retry_FailAbove(0)
+recovery_run(simple, rows, 3600000000, [100], 1)
+cases.append({'case': 'actual-recovery-four-attempt-bound-and-long-idle-single-probe',
+              'failed_probe_attempts': [100, 80, 40, 1], 'long_idle_probe_attempts': [100]})
+
+retry.Retry_Init(100, 0, 0, 0, 0)
+retry.Retry_FailAbove(80)
+for now in (0, 100000, 200000):
+    recovery_run(simple, rows, now, [100, 80] if now == 0 else [80])
+assert retry.Retry_Settings(100, 0x100, 1048576, 1)
+assert retry.Retry_SmallFrames(1) == 3 and retry.Retry_ScreenQuality(1) == 80
+recovery_run(simple, rows, 1999999, [80])
+assert retry.Retry_Settings(30, 0x102, 2097152, 1)
+assert retry.Retry_SmallFrames(1) == 0 and retry.Retry_SmallFrames(0) == 0
+assert retry.Retry_ScreenQuality(1) == 30 and retry.Retry_ScreenQuality(0) == 30
+recovery_run(simple, rows, 8000000, [30])
+assert retry.Retry_Settings(100, 0x102, 2097152, 1)
+assert retry.Retry_ScreenQuality(1) == 100 and retry.Retry_SmallFrames(1) == 0
+recovery_run(simple, rows, 9000000, [100, 80])
+assert not retry.Retry_Settings(100, 0x102, 2097152, 0)
+assert retry.Retry_ScreenQuality(1) == 80
+cases.append({'case': 'actual-settings-only-quality-change-resets-recovery-and-lower-ceiling-wins',
+              'lowered_quality': 30, 'mode_qos_changes_preserve_cooldown': True})
+
+retry.Retry_Init(100, 0, 0, 0, 0)
+noise = random.Random(0x134).randbytes(240 * 400 * 3)
+bottom_simple = bytes((32, 64, 96)) * (240 * 320)
+recovery_run(noise, 400, 0, [100, 80])
+for now in (100000, 200000, 300000, 3000000):
+    recovery_run(bottom_simple, 320, now, [100])
+assert retry.Retry_ScreenQuality(1) == 80 and retry.Retry_SmallFrames(1) == 0
+assert retry.Retry_ScreenQuality(0) == 100 and retry.Retry_SmallFrames(0) == 0
+recovery_run(noise, 400, 3100000, [80])
+cases.append({'case': 'actual-recovery-screen-isolation', 'top_quality': 80, 'bottom_quality': 100})
+
+for stop, pre in ((1, 0), (0, 1)):
+    retry.Retry_Init(100, 0, 0, 0, 0)
+    retry.Retry_FailAbove(80)
+    for now in (0, 100000, 200000):
+        recovery_run(simple, rows, now, [100, 80] if now == 0 else [80])
+    retry.Retry_Stop(stop, pre, 0, 0)
+    assert recovery_run(simple, rows, 2000000, [], 0) == 0
+    assert retry.Retry_ScreenQuality(1) == 80 and retry.Retry_SmallFrames(1) == 3
+    retry.Retry_Stop(0, 0, stop, pre)
+    assert recovery_run(simple, rows, 2000000, [100], 2) == 0
+    retry.Retry_Stop(0, 0, 0, 0)
+    recovery_run(simple, rows, 2000001, [80], 0)
+    cases.append({'case': 'actual-recovery-cancellation-before-and-during-probe', 'stop': stop,
+                  'preterminate': pre, 'subsequent_attempts': [80]})
+
+for requested in (1, 40, 79, 100):
+    retry.Retry_Init(requested, 0, 0, 0, 0)
+    recovery_run(simple, rows, 0, [requested], 1)
+    for now in (2000000, 5000000, 10000000):
+        recovery_run(simple, rows, now, [requested], 0)
+    assert retry.Retry_SmallFrames(1) == 0
+    cases.append({'case': 'actual-recovery-requested-quality-steady-no-table-rebuild', 'requested': requested})
+
+retry.Retry_Init(100, 0, 0, 0, 0)
+recovery_run(simple, rows, 0, [100])
+assert retry.Retry_SmallFrames(1) == 0 and retry.Retry_SmallFrames(0) == 0
+assert retry.Retry_ScreenQuality(1) == 100 and retry.Retry_ScreenQuality(0) == 100
+cases.append({'case': 'actual-recovery-restart-clears-screen-history'})
 assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source_hash
 report = {'all_passed': True, 'cases': cases, 'case_count': len(cases), 'decoder': 'Pillow ' + PIL.__version__,
           'retry_helper_sha256': hashlib.sha256(retry_helper.encode()).hexdigest(),
@@ -449,4 +636,4 @@ report = {'all_passed': True, 'cases': cases, 'case_count': len(cases), 'decoder
                       for path in (source_path, header_path, remote_path, Path(__file__))},
           'hardware_tested': False}
 (generated / 'report.json').write_bytes((json.dumps(report, indent=2) + '\n').encode())
-print(str(len(cases)) + ' JPEG decoder/color/rotation/bounds cases passed')
+print(str(len(cases)) + ' JPEG decoder/color/rotation/bounds/recovery cases passed')
