@@ -230,7 +230,7 @@ static inline void fdct1d(int32_t *d, uint32_t s)
     d[7 * s] = z11 - z4;
 }
 
-static int32_t encodeBlock(BitWriter *w, int32_t *blk, const uint16_t *recip, int32_t prevDc,
+static __attribute__((optimize("O2"))) int32_t encodeBlock(BitWriter *w, int32_t *blk, const uint16_t *recip, int32_t prevDc,
                            const HuffTable *dc, const HuffTable *ac)
 {
     for (uint32_t i = 0; i < 8; i++)

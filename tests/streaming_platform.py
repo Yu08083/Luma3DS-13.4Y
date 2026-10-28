@@ -225,7 +225,7 @@ def arm_proof(compiler,ctrulib,env):
     flags=['-std=gnu11','-Oz','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-fstack-usage','-march=armv6k','-mtune=mpcore','-mfpu=vfp','-mfloat-abi=hard','-mtp=soft','-D__3DS__','-I'+str(ROS/'include'),'-I'+str(ctrulib/'include')]
     commands=[]
     for name in ['remote_play','rp_jpeg','rp_kcopy','minisoc','dsp_audio']:
-        command=[str(compiler),*flags,*(['-O2'] if name=='rp_jpeg' else []),'-c',str(ROS/'source'/(name+'.c')),'-o',str(directory/(name+'.o'))]
+        command=[str(compiler),*flags,'-c',str(ROS/'source'/(name+'.c')),'-o',str(directory/(name+'.o'))]
         result=subprocess.run(command,env=env,capture_output=True,text=True)
         assert result.returncode==0,result.stdout+result.stderr
         commands.append(command)

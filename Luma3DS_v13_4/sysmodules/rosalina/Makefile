@@ -161,7 +161,6 @@ $(OUTPUT).elf	:	$(OFILES)
 	@$(NM) -CSn $@ > $(notdir $*.lst)
 
 draw.o: CFLAGS += -O2
-rp_jpeg.o: CFLAGS += -O2
 remote_play.o rp_jpeg.o rp_kcopy.o dsp_audio.o: CFLAGS += -fstack-usage
 LTO_OBJECTS := $(filter-out draw.o text.o dsp_audio.o menus.o lang.o $(notdir $(patsubst %.c,%.o,$(wildcard $(TOPDIR)/source/plugin/*.c))),$(OFILES_SRC))
 $(LTO_OBJECTS): CFLAGS += -flto
