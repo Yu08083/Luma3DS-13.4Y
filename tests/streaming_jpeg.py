@@ -399,6 +399,7 @@ encoder_type = declaration('typedef struct EncoderState\n', '} EncoderState;')
 capacity = int(re.search(r'#define JPEG_SLOT_CAP\s+\((\d+) \* 1024\)', remote_source)[1]) * 1024
 assert capacity == 128 * 1024
 assert int(re.search(r'#define QUALITY_RECOVERY_US\s+(\d+)', remote_source)[1]) == 2000000
+assert int(re.search(r'#define QUALITY_PROBE_US\s+(\d+)', remote_source)[1]) == 8000000
 retry_prefix = r'''
 #include <stdbool.h>
 #include <stdint.h>
@@ -413,6 +414,7 @@ typedef uint64_t u64;
 #define SYSCLOCK_ARM11 268123480ULL
 #define TICKS_PER_US (SYSCLOCK_ARM11 / 1000000)
 #define QUALITY_RECOVERY_US 2000000
+#define QUALITY_PROBE_US 8000000
 static u64 retryNow;
 static u64 svcGetSystemTick(void) { return retryNow; }
 static u32 settingsLock,settingsGeneration,viewerIp,settingMode,settingQuality,settingQos;
@@ -591,11 +593,46 @@ for rows in (400, 320):
 
     retry.Retry_Init(100, 0, 0, 0, 0)
     recovery_run(noise, rows, 0, [100, 90, 80])
-    for index in range(1, 31):
-        recovery_run(noise, rows, index * 500000, [80], 0)
+    probes = []
+    for index in range(1, 81):
+        now = index * 500000
+        probing = now % 8000000 == 0
+        recovery_run(noise, rows, now, [100, 90, 80] if probing else [80], 3 if probing else 0)
+        if probing:
+            probes.append(now)
     assert retry.Retry_SmallFrames(screen) == 0
-    cases.append({'case': 'actual-recovery-continuous-noise-no-high-quality-retry', 'rows': rows,
-                  'seconds': 15, 'following_encodes': 30, 'following_high_quality_attempts': 0})
+    assert probes == [8000000, 16000000, 24000000, 32000000, 40000000]
+    cases.append({'case': 'actual-recovery-continuous-noise-bounded-periodic-probe', 'rows': rows,
+                  'seconds': 40, 'following_encodes': 80, 'probe_times_us': probes,
+                  'following_high_quality_attempts': len(probes) * 2})
+
+    amplitude = 80 if rows == 400 else 112
+    rng = random.Random(0x594355)
+    moderate = Image.frombytes('RGB', (rows, 240), bytes(rng.randrange(128 - amplitude // 2,
+                    128 + amplitude // 2) for _ in range(rows * 240 * 3)))
+    moderate_data, moderate_stride = native_pixels(moderate, 1)
+    assert moderate_stride == 720
+    high = encode(moderate_data, 240, rows, 720, 1, 1, quality=90, capacity=capacity)
+    low = encode(moderate_data, 240, rows, 720, 1, 1, quality=80, capacity=capacity)
+    assert high and len(low) > capacity // 4
+    retry.Retry_Init(90, 0, 0, 0, 0)
+    recovery_run(noise, rows, 0, [90, 80])
+    for now in (100000, 200000, 2000000, 7999999):
+        assert recovery_run(moderate_data, rows, now, [80], 0) == len(low)
+    assert retry.Retry_SmallFrames(screen) == 0
+    assert retry.Retry_Settings(90, 0x102, 512 * 1024, 1)
+    assert recovery_run(moderate_data, rows, 8000000, [90], 1) == len(high)
+    assert ctypes.string_at(retry.Retry_Data(), len(high)) == high
+    for now in (16000000, 64000000, 3600000000):
+        recovery_run(moderate_data, rows, now, [90], 0)
+    high_decoded = decode(high, (240, rows)).transpose(Image.Transpose.ROTATE_90)
+    low_decoded = decode(low, (240, rows)).transpose(Image.Transpose.ROTATE_90)
+    high_psnr, low_psnr = psnr(moderate, high_decoded), psnr(moderate, low_decoded)
+    assert high_psnr > low_psnr + 5
+    cases.append({'case': 'actual-recovery-over-quarter-cap-scene-restores-native-444', 'rows': rows,
+                  'fallback_bytes': len(low), 'restored_bytes': len(high), 'probe_us': 8000000,
+                  'fallback_psnr_db': low_psnr, 'restored_psnr_db': high_psnr,
+                  'recovered_sha256': hashlib.sha256(high).hexdigest(), 'mode_qos_update_preserves_deadline': True})
 
 rows = 400
 simple = bytes((32, 64, 96)) * (240 * rows)
@@ -635,7 +672,7 @@ cases.append({'case': 'actual-recovery-four-attempt-bound-and-long-idle-single-p
 
 ticks_per_us = 268123480 // 1000000
 cooldown_ticks = 2000000 * ticks_per_us
-for origin in (0, 2 ** 32 - cooldown_ticks // 2, 13 * 2 ** 32 - 1):
+for origin in (0, 2 ** 32 - cooldown_ticks // 2, 13 * 2 ** 32 - 1, 2 ** 64 - cooldown_ticks // 2):
     retry.Retry_Init(100, 0, 0, 0, 0)
     retry.Retry_FailAbove(80)
     recovery_run(simple, rows, origin, [100, 90, 80], ticks=True)
@@ -651,13 +688,25 @@ retry.Retry_FailAbove(80)
 for now in (0, 1, 2):
     recovery_run(simple, rows, now, [100, 90, 80] if now == 0 else [80], ticks=True)
 retry.Retry_FailAbove(0)
-recovery_run(simple, rows, 120 * 2 ** 32, [80], 0, ticks=True)
-recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks - 1, [80], 0, ticks=True)
-recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks, [100], 1, ticks=True)
-assert retry.Retry_ScreenBytes() == 32
-cases.append({'case': 'actual-recovery-long-idle-full-wrap-defers-at-most-two-seconds',
-              'idle_ticks': 120 * 2 ** 32, 'maximum_deferral_ticks': cooldown_ticks,
+recovery_run(simple, rows, 120 * 2 ** 32, [100], 1, ticks=True)
+recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks - 1, [100], 0, ticks=True)
+recovery_run(simple, rows, 120 * 2 ** 32 + cooldown_ticks, [100], 0, ticks=True)
+assert retry.Retry_ScreenBytes() == 40
+cases.append({'case': 'actual-recovery-long-idle-full-wrap-probes-without-deferral',
+              'idle_ticks': 120 * 2 ** 32, 'maximum_deferral_ticks': 0,
               'screen_state_bytes': retry.Retry_ScreenBytes()})
+
+periodic_ticks = 8000000 * ticks_per_us
+noise = random.Random(0x134).randbytes(240 * rows * 3)
+for origin in (0, 2 ** 32 - periodic_ticks // 2, 13 * 2 ** 32 - 1, 2 ** 64 - periodic_ticks // 2):
+    retry.Retry_Init(90, 0, 0, 0, 0)
+    recovery_run(noise, rows, origin, [90, 80], ticks=True)
+    recovery_run(noise, rows, origin + periodic_ticks - 1, [80], 0, ticks=True)
+    recovery_run(noise, rows, origin + periodic_ticks, [90, 80], 2, ticks=True)
+    recovery_run(noise, rows, origin + periodic_ticks * 2 - 1, [80], 0, ticks=True)
+    recovery_run(noise, rows, origin + periodic_ticks * 2, [90, 80], 2, ticks=True)
+    cases.append({'case': 'actual-recovery-periodic-exact-deadline-and-failure-rearm',
+                  'failure_tick': origin, 'periodic_ticks': periodic_ticks})
 
 retry.Retry_Init(100, 0, 0, 0, 0)
 retry.Retry_FailAbove(80)
@@ -702,7 +751,12 @@ for now in (100000, 200000, 300000, 3000000):
 assert retry.Retry_ScreenQuality(1) == 80 and retry.Retry_SmallFrames(1) == 0
 assert retry.Retry_ScreenQuality(0) == 100 and retry.Retry_SmallFrames(0) == 0
 recovery_run(noise, 400, 3100000, [80])
-cases.append({'case': 'actual-recovery-screen-isolation', 'top_quality': 80, 'bottom_quality': 100})
+recovery_run(noise, 400, 8000000, [100, 90, 80])
+recovery_run(bottom_simple, 320, 16000000, [100])
+recovery_run(noise, 400, 15999999, [80])
+recovery_run(noise, 400, 16000000, [100, 90, 80])
+cases.append({'case': 'actual-recovery-screen-isolation', 'top_quality': 80, 'bottom_quality': 100,
+              'top_periodic_probes_us': [8000000, 16000000]})
 
 for stop, pre in ((1, 0), (0, 1)):
     retry.Retry_Init(100, 0, 0, 0, 0)
@@ -718,6 +772,19 @@ for stop, pre in ((1, 0), (0, 1)):
     recovery_run(simple, rows, 2000001, [90, 80], 1)
     cases.append({'case': 'actual-recovery-cancellation-before-and-during-probe', 'stop': stop,
                   'preterminate': pre, 'subsequent_attempts': [90, 80]})
+
+    retry.Retry_Init(90, 0, 0, 0, 0)
+    recovery_run(noise, rows, 0, [90, 80])
+    retry.Retry_Stop(stop, pre, 0, 0)
+    assert recovery_run(noise, rows, 8000000, [], 0) == 0
+    retry.Retry_Stop(0, 0, stop, pre)
+    assert recovery_run(noise, rows, 8000000, [90], 2) == 0
+    retry.Retry_Stop(0, 0, 0, 0)
+    recovery_run(noise, rows, 8000001, [80], 0)
+    recovery_run(noise, rows, 15999999, [80], 0)
+    recovery_run(noise, rows, 16000000, [90, 80], 2)
+    cases.append({'case': 'actual-recovery-periodic-cancellation-before-and-during-probe', 'stop': stop,
+                  'preterminate': pre, 'next_periodic_probe_us': 16000000})
 
 for requested in (1, 40, 79, 100):
     retry.Retry_Init(requested, 0, 0, 0, 0)

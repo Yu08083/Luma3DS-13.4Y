@@ -58,6 +58,7 @@ extern bool preTerminationRequested;
 #define SAME_FRAME_RESEND_US 500000
 #define MAX_COPY_RETRIES   2
 #define QUALITY_RECOVERY_US 2000000
+#define QUALITY_PROBE_US    8000000
 #define HASH_SEED          0x811C9DC5u
 
 #define VIDEO_THREAD_CORE  3
@@ -563,7 +564,7 @@ typedef struct ScreenState
     u8 frameId;
     u8 quality;
     u8 smallFrames;
-    u32 qualityFailureTick;
+    u64 qualityFailureTick;
 } ScreenState;
 
 typedef struct EncoderState
@@ -989,9 +990,10 @@ static u32 encodeCapture(JpegSlot *slot, const Capture *capture, ScreenState *sc
 {
     if (stopRequested | preTerminationRequested)
         return 0;
-    u32 now = (u32)svcGetSystemTick();
+    u64 now = svcGetSystemTick();
     int quality = screen->quality;
-    if (screen->smallFrames >= 3 && now - screen->qualityFailureTick >= (u32)(QUALITY_RECOVERY_US * TICKS_PER_US))
+    if ((screen->smallFrames >= 3 && now - screen->qualityFailureTick >= (u64)QUALITY_RECOVERY_US * TICKS_PER_US)
+        || (quality < enc.requestedQuality && now - screen->qualityFailureTick >= (u64)QUALITY_PROBE_US * TICKS_PER_US))
         quality = enc.requestedQuality;
     if (enc.jpeg.quality != quality)
         RpJpeg_SetQuality(&enc.jpeg, quality);

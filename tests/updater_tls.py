@@ -4,6 +4,7 @@ import ctypes as c
 import hashlib
 import json
 import os
+import re
 import select
 import socket
 import subprocess
@@ -44,6 +45,25 @@ int UpdateTest_ClockCertificate(UpdateTls *tls,const unsigned char *der,size_t s
     mbedtls_x509_crt_free(&certificate);
     return result;
 }
+int UpdateTest_ClockChain(UpdateTls *tls,const unsigned char *der,size_t size,const uint32_t *lengths,unsigned count,const char *hostname,uint32_t *flags){
+    mbedtls_x509_crt chain;
+    mbedtls_x509_crt_init(&chain);
+    int result=0;
+    size_t offset=0;
+    for(unsigned index=0;index<count&&!result;++index){
+        if(lengths[index]>size-offset){result=MBEDTLS_ERR_X509_BAD_INPUT_DATA;break;}
+        result=mbedtls_x509_crt_parse_der(&chain,der+offset,lengths[index]);
+        offset+=lengths[index];
+    }
+    if(!result&&offset!=size)result=MBEDTLS_ERR_X509_BAD_INPUT_DATA;
+    if(!result)result=mbedtls_x509_crt_verify_with_profile(&chain,&tls->roots,NULL,&mbedtls_x509_crt_profile_default,hostname,flags,clockVerify,tls);
+    tls->verifyFlags=*flags;
+    tls->error=result;
+    mbedtls_x509_crt_free(&chain);
+    return result;
+}
+void UpdateTest_ClearRoots(UpdateTls *tls){mbedtls_x509_crt_free(&tls->roots);mbedtls_x509_crt_init(&tls->roots);}
+int UpdateTest_SetRoots(UpdateTls *tls,const unsigned char *der,size_t size){UpdateTest_ClearRoots(tls);return mbedtls_x509_crt_parse_der(&tls->roots,der,size);}
 int UpdateTest_DateFailure(int error,uint32_t flags,int mode,int connected){
     UpdateTls tls={.ownsPool=true,.error=error,.verifyFlags=flags,.clockMode=mode!=0,.connected=connected!=0};
     return UpdateTls_DateFailure(&tls);
@@ -79,6 +99,9 @@ int UpdateTest_DateFailure(int error,uint32_t flags,int mode,int connected){
     lib.UpdateTest_VerifyFlags.argtypes=[c.c_void_p];lib.UpdateTest_VerifyFlags.restype=c.c_uint32
     lib.UpdateTest_ClockReady.argtypes=[c.c_void_p]
     lib.UpdateTest_ClockCertificate.argtypes=[c.c_void_p,c.c_void_p,c.c_size_t,c.c_int,c.POINTER(c.c_uint32),c.c_int];lib.UpdateTest_ClockCertificate.restype=c.c_int
+    lib.UpdateTest_ClockChain.argtypes=[c.c_void_p,c.c_void_p,c.c_size_t,c.POINTER(c.c_uint32),c.c_uint,c.c_char_p,c.POINTER(c.c_uint32)];lib.UpdateTest_ClockChain.restype=c.c_int
+    lib.UpdateTest_ClearRoots.argtypes=[c.c_void_p]
+    lib.UpdateTest_SetRoots.argtypes=[c.c_void_p,c.c_void_p,c.c_size_t];lib.UpdateTest_SetRoots.restype=c.c_int
     lib.UpdateTest_DateFailure.argtypes=[c.c_int,c.c_uint32,c.c_int,c.c_int];lib.UpdateTest_DateFailure.restype=c.c_int
     lib.UpdateTls_Handshake.argtypes=[c.c_void_p];lib.UpdateTls_Handshake.restype=c.c_int
     lib.UpdateTls_Read.argtypes=[c.c_void_p,c.c_void_p,c.c_size_t];lib.UpdateTls_Read.restype=c.c_int
@@ -176,13 +199,17 @@ def main():
     lib.UpdateTls_Close(tls)
     cases.append(dict(name='pool_reuse_after_close'))
     der=(ROOT/'tests/fixtures/updater-clock-api.der').read_bytes()
-    def certificate(depth,flags=0,variant=0):
+    root_text=(ROS/'source/updater_ca.c').read_text()
+    root_body=re.search(r'static const uint8_t updateCa0\[\] = \{(.*?)\};',root_text,re.S).group(1)
+    anchor=bytes(int(word,16) for word in re.findall(r'0x([0-9A-Fa-f]{2})',root_body))
+    def certificate(depth,flags=0,variant=0,raw=der):
         value=c.c_uint32(flags)
-        assert lib.UpdateTest_ClockCertificate(tls,der,len(der),depth,c.byref(value),variant)==0
+        assert lib.UpdateTest_ClockCertificate(tls,raw,len(raw),depth,c.byref(value),variant)==0
         return value.value
     assert not lib.UpdateTls_ConfirmClock(None,1792249200) and not lib.UpdateTls_DateFailure(None)
     for flags in [0,1,0x200,0x201]+[1<<bit for bit in range(32)]:
         assert lib.UpdateTls_InitClock(tls,c.byref(failed_random))==0
+        assert certificate(1,raw=anchor)==0
         remaining=certificate(0,flags)
         lib.UpdateTest_ClockReady(tls)
         permitted=not (flags&~0x201)
@@ -191,7 +218,7 @@ def main():
         lib.UpdateTls_Close(tls)
     cases.append(dict(name='clock_only_expired_future_flags_relaxed',flag_patterns=36))
     assert lib.UpdateTls_InitClock(tls,c.byref(failed_random))==0
-    assert certificate(1,0x201,2)==0 and certificate(0,0x201)==0
+    assert certificate(1,0x201,2,anchor)==0 and certificate(0,0x201)==0
     assert not lib.UpdateTls_ConfirmClock(tls,1792368000)
     lib.UpdateTest_ClockReady(tls)
     assert not lib.UpdateTls_ConfirmClock(tls,1792249200)
@@ -200,13 +227,38 @@ def main():
     assert not lib.UpdateTls_ConfirmClock(tls,1792249199)
     lib.UpdateTls_Close(tls)
     cases.append(dict(name='clock_verified_chain_intersection_build_floor_and_handshake_required'))
-    for depths,variant in [([0],1),([0],4),([2,0],0),([0,0],0),([-1],0),([16],0)]:
+    rejected=[[(1,anchor,1)],[(1,anchor,0),(0,der,4)],[(2,anchor,0),(0,der,0)],[(1,anchor,0),(0,der,0),(0,der,0)],[(-1,anchor,0)],[(16,anchor,0)],[(0,der,0)],[(1,der,0)],[(3,anchor,0),(1,der,0),(2,der,0),(0,der,0)],[(1,anchor[:-1]+bytes([anchor[-1]^1]),0),(0,der,0)]]
+    forged=(ROOT/'tests/fixtures/updater-clock-untrusted-same-name-root.der').read_bytes()
+    rejected.append([(1,forged,0),(0,der,0)])
+    for entries in rejected:
         assert lib.UpdateTls_InitClock(tls,c.byref(failed_random))==0
-        for depth in depths:certificate(depth,0,variant)
+        for depth,raw,variant in entries:certificate(depth,0,variant,raw)
         lib.UpdateTest_ClockReady(tls)
         assert not lib.UpdateTls_ConfirmClock(tls,1792249200)
         lib.UpdateTls_Close(tls)
-    cases.append(dict(name='clock_rejects_wrong_pin_invalid_cert_duplicate_missing_and_excess_depth',patterns=6))
+    cases.append(dict(name='clock_rejects_untrusted_or_damaged_anchor_leaf_anchor_invalid_cert_duplicate_missing_excess_and_reordered_depth',patterns=len(rejected)))
+    current=(ROOT/'tests/fixtures/updater-clock-api-20261028.der').read_bytes()
+    intermediate=(ROOT/'tests/fixtures/updater-clock-sectigo-e36.der').read_bytes()
+    cross=(ROOT/'tests/fixtures/updater-clock-sectigo-e46.der').read_bytes()
+    for label,leaf,hostname,trusted,approved in [('old_leaf',der,b'api.github.com',True,True),('rotated_leaf',current,b'api.github.com',True,True),('wrong_hostname',current,b'not-github.invalid',True,False),('untrusted_ca',current,b'api.github.com',False,False),('bad_leaf_signature',current[:-1]+bytes([current[-1]^1]),b'api.github.com',True,False),('bad_intermediate_signature',current,b'api.github.com',True,False),('missing_intermediate',current,b'api.github.com',True,False),('untrusted_same_name_root',current,b'api.github.com',True,False)]:
+        assert lib.UpdateTls_InitClock(tls,c.byref(failed_random))==0
+        if not trusted:lib.UpdateTest_ClearRoots(tls)
+        middle=intermediate[:-1]+bytes([intermediate[-1]^1]) if label=='bad_intermediate_signature' else intermediate
+        if label=='untrusted_same_name_root':assert lib.UpdateTest_SetRoots(tls,forged,len(forged))==0
+        pieces=[leaf,cross] if label=='missing_intermediate' else [leaf,middle,cross]
+        chain=b''.join(pieces)
+        lengths=(c.c_uint32*len(pieces))(*map(len,pieces))
+        flags=c.c_uint32()
+        result=lib.UpdateTest_ClockChain(tls,chain,len(chain),lengths,len(pieces),hostname,c.byref(flags))
+        lib.UpdateTest_ClockReady(tls)
+        confirmed=bool(lib.UpdateTls_ConfirmClock(tls,1793203073))
+        assert (result==0)==approved and confirmed==approved,(label,result,flags.value,confirmed)
+        if approved:
+            assert not lib.UpdateTls_ConfirmClock(tls,1792249199)
+            assert not lib.UpdateTls_ConfirmClock(tls,2524608000)
+            assert not lib.UpdateTls_ConfirmClock(tls,1795824000 if label=='old_leaf' else 1792249200)
+        cases.append(dict(name='actual_chain_'+label,verified=result,flags=flags.value,confirmed=confirmed))
+        lib.UpdateTls_Close(tls)
     for error,flags,mode,connected,expected in [(-0x2700,1,0,0,1),(-0x2700,0x200,0,0,1),(-0x2700,0x201,0,0,1),(-0x2700,5,0,0,0),(-0x2700,0,0,0,0),(-0x2700,0xFFFFFFFF,0,0,0),(-0x2700,1,1,0,0),(-0x2700,1,0,1,0),(-0x6C00,1,0,0,0)]:
         assert lib.UpdateTest_DateFailure(error,flags,mode,connected)==expected
     cases.append(dict(name='normal_retry_only_date_failure',patterns=9))
@@ -221,10 +273,10 @@ def main():
             assert result==-2 and error!=0,(name,result,error)
             cases.append(dict(name=name,error=error))
             print(name,'rejected',flush=True)
-        for when in [1577836800,2524608000]:
+        for when in [0,1577836800,int(time.time()),2524608000]:
             result,error=connect(lib,'api.github.com',when=when,bootstrap=True)
             assert result==1 and error==0
-            cases.append(dict(name='pinned_clock_bootstrap_wrong_rtc',rtc=when))
+            cases.append(dict(name='trusted_anchor_clock_bootstrap',rtc=when))
             print('clock bootstrap',when,'pass',flush=True)
     report=dict(result='pass',cases=cases,count=len(cases),tls='1.2 only',verification='required; hostname and validity dates enabled',pool_bytes=192*1024,hardware_tested=False,source_sha256=hashlib.sha256((ROS/'source/updater_tls.c').read_bytes()).hexdigest())
     (OUT/'tls-proof.json').write_bytes((json.dumps(report,indent=2)+'\n').encode())

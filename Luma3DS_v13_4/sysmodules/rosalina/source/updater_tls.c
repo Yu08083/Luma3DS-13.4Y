@@ -4,7 +4,6 @@
 #include "mbedtls/memory_buffer_alloc.h"
 #include "mbedtls/platform.h"
 #include "mbedtls/platform_util.h"
-#include "mbedtls/sha256.h"
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -40,14 +39,26 @@ static int tlsRandom(void *context,unsigned char *data,size_t size) {
     return tls->io.random(tls->io.context,data,size);
 }
 
+static bool clockAnchor(const UpdateTls *tls,const mbedtls_x509_crt *certificate) {
+    if(!mbedtls_x509_crt_get_ca_istrue(certificate)||!certificate->raw.p||!certificate->raw.len||!certificate->pk_raw.p||!certificate->pk_raw.len)return false;
+    for(const mbedtls_x509_crt *anchor=&tls->roots;anchor;anchor=anchor->next) {
+        if(anchor->raw.len==certificate->raw.len&&anchor->pk_raw.len==certificate->pk_raw.len&&anchor->raw.p&&anchor->pk_raw.p&&
+           !memcmp(anchor->raw.p,certificate->raw.p,certificate->raw.len)&&!memcmp(anchor->pk_raw.p,certificate->pk_raw.p,certificate->pk_raw.len))return true;
+    }
+    return false;
+}
+
 static int clockVerify(void *context,mbedtls_x509_crt *certificate,int depth,uint32_t *flags) {
-    static const unsigned char pin[]={0x4B,0x62,0xD4,0x21,0xBA,0xB8,0xC9,0x48,0x39,0xC3,0xE3,0x18,0x6E,0x3E,0x4B,0x64,0xE5,0x80,0x64,0x0C,0xDA,0x78,0xD1,0x89,0xF6,0xB4,0xD3,0x73,0x81,0xA3,0xBC,0x14};
     const uint32_t dates=MBEDTLS_X509_BADCERT_EXPIRED|MBEDTLS_X509_BADCERT_FUTURE;
     UpdateTls *tls=context;
-    if(!certificate||depth<0||depth>=16||(tls->clockSeen&(1u<<depth))) {
+    if(!certificate||depth<0||depth>=16||(tls->clockSeen&(1u<<depth))||(tls->clockSeen&&!(tls->clockSeen&(1u<<(depth+1))))) {
         tls->clockInvalid=true;
         *flags|=MBEDTLS_X509_BADCERT_OTHER;
         return 0;
+    }
+    if(!tls->clockSeen) {
+        tls->clockPinned=depth>0&&clockAnchor(tls,certificate);
+        if(!tls->clockPinned)tls->clockInvalid=true;
     }
     tls->clockSeen|=1u<<depth;
     int64_t first=UpdateClock_FromDate(certificate->valid_from.year,certificate->valid_from.mon,certificate->valid_from.day,certificate->valid_from.hour,certificate->valid_from.min,certificate->valid_from.sec);
@@ -55,17 +66,6 @@ static int clockVerify(void *context,mbedtls_x509_crt *certificate,int depth,uin
     if(first<0||last<first||(*flags&~dates))tls->clockInvalid=true;
     if(first>tls->clockFrom)tls->clockFrom=first;
     if(last<tls->clockUntil)tls->clockUntil=last;
-    if(depth==0) {
-        unsigned char digest[32];
-        unsigned different=0;
-        if(!certificate->pk_raw.p||!certificate->pk_raw.len||mbedtls_sha256(certificate->pk_raw.p,certificate->pk_raw.len,digest,0))tls->clockInvalid=true;
-        else {
-            for(unsigned index=0;index<sizeof(pin);++index)different|=digest[index]^pin[index];
-            tls->clockPinned=different==0;
-        }
-        mbedtls_platform_zeroize(digest,sizeof(digest));
-        if(!tls->clockPinned)tls->clockInvalid=true;
-    }
     *flags&=~dates;
     if(tls->clockInvalid)*flags|=MBEDTLS_X509_BADCERT_OTHER;
     return 0;
