@@ -64,6 +64,7 @@ static LightLock settingsLock;
 static u32 viewerIp, settingMode, settingQuality, settingQos, settingsGeneration;
 static RemotePlayStatus status;
 static volatile bool stopRequested, linkDown;
+static bool isN3DS = true;
 static int videoSock = 42;
 static u64 tick;
 static u32 sleepCount, recvCalls, sendCalls, datagramCount, udpErrorAt, tcpLimit;
@@ -130,6 +131,7 @@ static void reset(void)
     settingsLock = 0;
     viewerIp = settingMode = settingQuality = settingQos = settingsGeneration = 0;
     stopRequested = linkDown = false;
+    isN3DS = true;
     tick = 1000000000;
     sleepCount = recvCalls = sendCalls = datagramCount = udpErrorAt = 0;
     readError = writeError = udpError = 0;
@@ -329,6 +331,7 @@ static void udpTests(void)
     for(u32 delay = 0; delay < sizeof(delayUs) / sizeof(*delayUs); ++delay)
     {
         reset(); slot.size = 5000; slot.packetIntervalTicks = SYSCLOCK_ARM11 / 1000;
+        isN3DS = false;
         sender.lastPacketTick = tick;
         udpDelayTicks = (u64)delayUs[delay] * SYSCLOCK_ARM11 / 1000000;
         assert(sendFrame(&slot) == 1 && datagramCount == 4);

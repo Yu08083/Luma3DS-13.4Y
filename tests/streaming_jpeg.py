@@ -799,6 +799,81 @@ recovery_run(simple, rows, 0, [100])
 assert retry.Retry_SmallFrames(1) == 0 and retry.Retry_SmallFrames(0) == 0
 assert retry.Retry_ScreenQuality(1) == 100 and retry.Retry_ScreenQuality(0) == 100
 cases.append({'case': 'actual-recovery-restart-clears-screen-history'})
+
+
+def native_golden_pixels(rows, format_value):
+    bpp = library.RpJpeg_BytesPerPixel(format_value)
+    data = bytearray()
+    for y in range(rows):
+        for x in range(240):
+            red, green, blue = ((x * 17 + y * 9) & 255, (x * 3 + y * 19) & 255, (x * 13 + y * 7) & 255)
+            if (x // 3 + y // 5) % 5 == 0:
+                red, green, blue = 239, 35, 49
+            elif (x + y) % 11 == 0:
+                red, green, blue = 29, 75, 231
+            if format_value == 0:
+                pixel = bytes(((x + y) & 255, blue, green, red))
+            elif format_value == 1:
+                pixel = bytes((blue, green, red))
+            elif format_value == 2:
+                pixel = struct.pack('<H', ((red >> 3) << 11) | ((green >> 2) << 5) | (blue >> 3))
+            elif format_value == 3:
+                pixel = struct.pack('<H', ((red >> 3) << 11) | ((green >> 3) << 6) | ((blue >> 3) << 1) | ((x + y) & 1))
+            else:
+                pixel = struct.pack('<H', ((red >> 4) << 12) | ((green >> 4) << 8) | ((blue >> 4) << 4) | ((x + y) & 15))
+            data.extend(pixel)
+    return bytes(data), 240 * bpp
+
+
+native_goldens = [
+    (400, 0, 70, '9fa43ba9227a7068135efdfa187c022a30256bf77d439a57eaf6a8df3c8b5335', 49151, {131072: 49151, 4096: 0, 49150: 0}),
+    (400, 0, 90, 'd3a66d22e691d74ee423a2d852330fa3edccf5c938d323896e6b33ed6858280f', 162254, {131072: 0, 4096: 0, 162253: 0}),
+    (400, 0, 95, '1cfdec8064080f6ce2c20050564abe4a47e9d98e28cca6fb860a9c2da47c72af', 210783, {131072: 0, 4096: 0, 210782: 0}),
+    (400, 1, 70, '9fa43ba9227a7068135efdfa187c022a30256bf77d439a57eaf6a8df3c8b5335', 49151, {131072: 49151, 4096: 0, 49150: 0}),
+    (400, 1, 90, 'd3a66d22e691d74ee423a2d852330fa3edccf5c938d323896e6b33ed6858280f', 162254, {131072: 0, 4096: 0, 162253: 0}),
+    (400, 1, 95, '1cfdec8064080f6ce2c20050564abe4a47e9d98e28cca6fb860a9c2da47c72af', 210783, {131072: 0, 4096: 0, 210782: 0}),
+    (400, 2, 70, '17403b73ae37a2bcc5ea86e9dd9d057dbaff77a535114d98d65f907773db94e7', 49839, {131072: 49839, 4096: 0, 49838: 0}),
+    (400, 2, 90, 'abd8682d21a787e135a8682306900791ee38f1aaf7ac08984c7fac5fc57c5d45', 163581, {131072: 0, 4096: 0, 163580: 0}),
+    (400, 2, 95, '5e0453fdb6776f04ae485e815d359cc01ed3303bc10d02fa3d87d47d20ba431e', 212319, {131072: 0, 4096: 0, 212318: 0}),
+    (400, 3, 70, '4cb96314e633f6ed12dd2023b7ada4765fc5c8b3ec778cbce01f4852e17cc820', 49934, {131072: 49934, 4096: 0, 49933: 0}),
+    (400, 3, 90, '03dbf91fd2d83d8efee6f468ba1997386b89ef0833f2ed17d9db3ab0a11803e3', 163827, {131072: 0, 4096: 0, 163826: 0}),
+    (400, 3, 95, 'a69a6140d51c371d223bf92988b76c3cf4b7a960e913c1ddacaa613f42e56f45', 212736, {131072: 0, 4096: 0, 212735: 0}),
+    (400, 4, 70, '42fb582fa027a54dd0a612ce42a335c128f02a0f62901ce39ce8eda9207df6f6', 50904, {131072: 50904, 4096: 0, 50903: 0}),
+    (400, 4, 90, 'da99419429993db3436193858bb5b5f3a5c7674ffb8ea3d2805e7e6b2ecdd209', 165801, {131072: 0, 4096: 0, 165800: 0}),
+    (400, 4, 95, '6ba73acf4e57821f5df1b7edb3d9abe29568c230a81696396569613477f8bc74', 215216, {131072: 0, 4096: 0, 215215: 0}),
+    (320, 0, 70, '7cab51f239f508198068342c1d740019ee2dd7b84132254503387a73e1dc27f9', 39358, {131072: 39358, 4096: 0, 39357: 0}),
+    (320, 0, 90, '4e7a18607792b0943d2cf4d79b6552d706f666a5978962cd93b916541fe5e8c0', 129477, {131072: 0, 4096: 0, 129476: 0}),
+    (320, 0, 95, 'c7e9fb22b7e278a55eb8e7d42144b3b632e41db6b6fd093a247cf6495cb8333c', 168215, {131072: 0, 4096: 0, 168214: 0}),
+    (320, 1, 70, '7cab51f239f508198068342c1d740019ee2dd7b84132254503387a73e1dc27f9', 39358, {131072: 39358, 4096: 0, 39357: 0}),
+    (320, 1, 90, '4e7a18607792b0943d2cf4d79b6552d706f666a5978962cd93b916541fe5e8c0', 129477, {131072: 0, 4096: 0, 129476: 0}),
+    (320, 1, 95, 'c7e9fb22b7e278a55eb8e7d42144b3b632e41db6b6fd093a247cf6495cb8333c', 168215, {131072: 0, 4096: 0, 168214: 0}),
+    (320, 2, 70, 'a89990ea653c34727c6267a11b1f984b640537062353cca45d2d8578af1219dc', 39907, {131072: 39907, 4096: 0, 39906: 0}),
+    (320, 2, 90, '32faada711ab96701e416d660efebae969438b98b4013d1f7092eac2d3599526', 130557, {131072: 0, 4096: 0, 130556: 0}),
+    (320, 2, 95, '6e4124f0aa2cad883b3aeb38ef9636b0cf9de5e4a2308f2b0221fffd8bc9d452', 169430, {131072: 0, 4096: 0, 169429: 0}),
+    (320, 3, 70, 'e05856562f55761cbeb67fb291f1671e5a31ccd97e5336828f8abf7a8aad65e4', 39977, {131072: 39977, 4096: 0, 39976: 0}),
+    (320, 3, 90, '6bbd5e9f73f995ebe3f035dd332291b5b1ad213f2b42cb0ad605f9703c46661b', 130750, {131072: 0, 4096: 0, 130749: 0}),
+    (320, 3, 95, '6977ae201ebf314e95b38ae5cf2cf6f46836c427734c39bf35e95177c8266aaf', 169795, {131072: 0, 4096: 0, 169794: 0}),
+    (320, 4, 70, 'b8188fc82d3110a72213d8290087f49e58df6876c4217145db9d21707a0e528d', 40761, {131072: 40761, 4096: 0, 40760: 0}),
+    (320, 4, 90, '779b18a70c67d04932d2e1d72666bc19283b4f40c426b6ff82ff2f7ed5c1baad', 132294, {131072: 0, 4096: 0, 132293: 0}),
+    (320, 4, 95, '8fe33c932d04a59cea759d0bdcc506d3aa3203e271d4b40bb064511eb9383b34', 171807, {131072: 0, 4096: 0, 171806: 0}),
+ ]
+golden_pixels = {}
+for rows, format_value, quality, digest, expected_size, capacities in native_goldens:
+    key = rows, format_value
+    if key not in golden_pixels:
+        golden_pixels[key] = native_golden_pixels(rows, format_value)
+    data, stride = golden_pixels[key]
+    jpeg = encode(data, 240, rows, stride, 1, format_value, quality=quality)
+    assert len(jpeg) == expected_size and hashlib.sha256(jpeg).hexdigest() == digest
+    for output_capacity, expected_count in capacities.items():
+        bounded = encode(data, 240, rows, stride, 1, format_value, quality=quality, capacity=output_capacity)
+        assert len(bounded) == expected_count
+        assert not bounded or bounded == jpeg
+    cases.append({'case': 'loadblock-native-screen-byte-exact-golden', 'rows': rows, 'format': format_value,
+                  'quality': quality, 'jpeg_bytes': len(jpeg), 'jpeg_sha256': digest,
+                  'bounded_capacity_results': capacities,
+                  'baseline_jpeg_sha256': 'bd62d5dfccd6f645c31753a7d4018398ff5ed38a0993481da055a156d91311b6'})
+
 assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source_hash
 report = {'all_passed': True, 'cases': cases, 'case_count': len(cases), 'decoder': 'Pillow ' + PIL.__version__,
           'retry_helper_sha256': hashlib.sha256(retry_helper.encode()).hexdigest(),

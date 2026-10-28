@@ -872,6 +872,13 @@ static int sendFrame(const JpegSlot *slot)
 
     u32 packets = 0;
     u64 sendtoTicks = 0, sleepTicks = 0;
+    u64 plannedTick = snd.lastPacketTick;
+    if (isN3DS)
+    {
+        u64 now = svcGetSystemTick();
+        if (now - plannedTick > slot->packetIntervalTicks)
+            plannedTick = now - slot->packetIntervalTicks;
+    }
 
     while (size != 0 && !stopRequested && !linkDown)
     {
@@ -882,7 +889,7 @@ static int sendFrame(const JpegSlot *slot)
         jpeg += chunk;
 
         u64 now = svcGetSystemTick();
-        u64 elapsed = now - snd.lastPacketTick;
+        u64 elapsed = now - (isN3DS ? plannedTick : snd.lastPacketTick);
         while (elapsed < slot->packetIntervalTicks && !stopRequested && !linkDown)
         {
             u64 remaining = slot->packetIntervalTicks - elapsed;
@@ -890,11 +897,17 @@ static int sendFrame(const JpegSlot *slot)
             u64 woke = svcGetSystemTick();
             sleepTicks += woke - now;
             now = woke;
-            elapsed = now - snd.lastPacketTick;
+            elapsed = now - (isN3DS ? plannedTick : snd.lastPacketTick);
         }
         if (stopRequested || linkDown)
             break;
 
+        if (isN3DS)
+        {
+            plannedTick += slot->packetIntervalTicks;
+            if (now - plannedTick > slot->packetIntervalTicks)
+                plannedTick = now - slot->packetIntervalTicks;
+        }
         snd.lastPacketTick = now;
         int res = socSendto(videoSock, pkt, VIDEO_HEADER_SIZE + chunk, 0, (struct sockaddr *)&addr, sizeof(addr));
         u64 sent = svcGetSystemTick();

@@ -344,9 +344,26 @@ static inline int32_t lumaOf(uint32_t r, uint32_t g, uint32_t b)
     return (int32_t)((77 * r + 150 * g + 29 * b + 128) >> 8) - 128;
 }
 
-static void loadBlock(int32_t *yb, int32_t *cb, int32_t *cr, const uint8_t *src,
+static __attribute__((optimize("O2"))) void loadBlock(int32_t *yb, int32_t *cb, int32_t *cr, const uint8_t *src,
                       uint32_t rowPitch, int format, uint32_t downsample)
 {
+    if (downsample == 0)
+    {
+        uint8_t r[8], g[8], b[8];
+        for (uint32_t y = 0; y < 8; ++y)
+        {
+            loadPixels(src + y * rowPitch, format, r, g, b);
+            for (uint32_t x = 0; x < 8; ++x)
+            {
+                int32_t sr = r[x], sg = g[x], sb = b[x];
+                uint32_t index = y * 8 + x;
+                yb[index] = lumaOf(sr, sg, sb);
+                cb[index] = (-43 * sr - 85 * sg + 128 * sb + 128) >> 8;
+                cr[index] = (128 * sr - 107 * sg - 21 * sb + 128) >> 8;
+            }
+        }
+        return;
+    }
     uint8_t r[2][8], g[2][8], b[2][8];
     uint32_t factor = 1u << downsample;
     uint32_t chromaSize = 8u >> downsample;
