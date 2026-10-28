@@ -40,6 +40,7 @@ jobs:
       - run: python3 tests/online_bridge.py
       - run: python3 -m pip install unicorn==2.1.4 Pillow==12.3.0
       - run: python3 tests/streaming.py
+      - run: python3 tests/patch_makerom.py
       - run: python3 tests/adorable_ntr.py
       - run: python3 tests/streaming_jpeg.py
       - run: python3 tests/streaming_platform.py
@@ -74,6 +75,7 @@ jobs:
           echo '/tmp/luma-python/bin' >> "$GITHUB_PATH"
           git clone https://github.com/3DSGuy/Project_CTR.git /tmp/project-ctr
           git -C /tmp/project-ctr checkout e8f5f529c54ff9b22a2491a480ffa69206bf7b19
+          python3 tools/patch_makerom.py /tmp/project-ctr/makerom/src/code.c
           make -C /tmp/project-ctr/makerom deps -j2
           make -C /tmp/project-ctr/makerom -j2
           install /tmp/project-ctr/makerom/bin/makerom /usr/local/bin/makerom

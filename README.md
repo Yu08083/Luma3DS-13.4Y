@@ -42,6 +42,8 @@ Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生�
 
 使用する[libctru](https://github.com/devkitPro/libctru)はv2.7.0（`36fe1ada5b7ebe53ba4decda36d764a55f8fefb6`）です。その他のツールの固定版と検証手順は [.github/workflows/build.yml](.github/workflows/build.yml) にあります。
 
+makeromは[固定コミット](https://github.com/3DSGuy/Project_CTR/tree/e8f5f529c54ff9b22a2491a480ffa69206bf7b19)を取得し、`python3 tools/patch_makerom.py <Project_CTR>/makerom/src/code.c` を適用してからビルド・配置してください。CIも同じ手順で準備します。
+
 切り替え用v9.1の元ファイルは `assets/legacy/boot-9.1.firm`、対応ソースは `Luma3DS_v9_1/` です。通常のビルドではv13.4Yをビルドし、検証済みのv9.1を同梱します。
 
 ## ライセンス

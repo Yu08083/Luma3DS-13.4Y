@@ -153,6 +153,8 @@ $(OUTPUT).cxi	:	$(OUTPUT).elf $(OUTPUT).rsf
 	@makerom -f ncch -rsf $(word 2,$^) -nocodepadding -o $@ -elf $<
 	@echo built ... $(notdir $@)
 
+$(OUTPUT).cxi: export MAKEROM_BLZ_BEST := 1
+
 $(OUTPUT).elf	:	$(OFILES)
 
 %.elf: $(OFILES)

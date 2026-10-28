@@ -1,0 +1,8 @@
+{
+  "project": "3DSGuy/Project_CTR",
+  "commit": "e8f5f529c54ff9b22a2491a480ffa69206bf7b19",
+  "source": "https://github.com/3DSGuy/Project_CTR/blob/e8f5f529c54ff9b22a2491a480ffa69206bf7b19/makerom/src/code.c",
+  "license": "MIT",
+  "license_file": "LICENSE",
+  "purpose": "Unmodified pinned input for the checked build-tool compression patch"
+}
