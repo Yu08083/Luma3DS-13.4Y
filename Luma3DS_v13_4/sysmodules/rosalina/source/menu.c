@@ -567,7 +567,7 @@ static void menuDraw(Menu *menu, u32 selected, bool refreshStatus, MenuDrawState
     bool scrolled = state->scroll != menuScrollOffset;
     bool selectionChanged = !state->valid || state->selected != selected;
     bool statusChanged = menuRefreshStatus(refreshStatus);
-    bool captureRunning = menu == &rosalinaMenu && isN3DS && RemotePlay_IsRunning();
+    bool captureRunning = menu == &rosalinaMenu && RemotePlay_IsRunning();
     bool captureChanged = state->captureRunning != captureRunning;
     if (!full && !scrolled && !selectionChanged && !statusChanged && !captureChanged)
         return;

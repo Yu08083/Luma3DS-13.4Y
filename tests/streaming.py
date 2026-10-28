@@ -70,6 +70,7 @@ static u32 sleepCount, recvCalls, sendCalls, datagramCount, udpErrorAt, tcpLimit
 static int readError, writeError, udpError;
 static u8 readBytes[1049000], writeBytes[4096], datagrams[128][1448];
 static u32 readSize, readOffset, writeSize, datagramSizes[128];
+static u64 datagramTicks[128], udpDelayTicks;
 static struct sockaddr_in destinations[128];
 static u64 svcGetSystemTick(void) { tick += 268; return tick; }
 static void svcSleepThread(s64 ns)
@@ -113,6 +114,8 @@ static int socSendto(int sock, const void *data, u32 size, int flags,
     memcpy(datagrams[index], data, size);
     datagramSizes[index] = size;
     destinations[index] = *target;
+    datagramTicks[index] = tick;
+    tick += udpDelayTicks;
     if(udpError && datagramCount == udpErrorAt) return udpError;
     return (int)size;
 }
@@ -322,6 +325,24 @@ static void udpTests(void)
     sender.lastPacketTick = tick;
     assert(sendFrame(&slot) == 1 && datagramCount == 4 && sleepCount == 4 && status.sleepUs > 0);
     ++cases;
+    const u32 delayUs[] = {0, 100, 900, 1500, 5000};
+    for(u32 delay = 0; delay < sizeof(delayUs) / sizeof(*delayUs); ++delay)
+    {
+        reset(); slot.size = 5000; slot.packetIntervalTicks = SYSCLOCK_ARM11 / 1000;
+        sender.lastPacketTick = tick;
+        udpDelayTicks = (u64)delayUs[delay] * SYSCLOCK_ARM11 / 1000000;
+        assert(sendFrame(&slot) == 1 && datagramCount == 4);
+        u64 minimum = slot.packetIntervalTicks > udpDelayTicks ? slot.packetIntervalTicks : udpDelayTicks;
+        for(u32 i = 1; i < datagramCount; ++i)
+        {
+            u64 spacing = datagramTicks[i] - datagramTicks[i - 1];
+            assert(spacing >= slot.packetIntervalTicks && spacing >= udpDelayTicks);
+            assert(spacing <= minimum + 3 * TICKS_PER_US);
+        }
+        assert(sender.lastPacketTick == datagramTicks[datagramCount - 1]);
+        ++cases;
+    }
+    udpDelayTicks = 0;
 }
 int main(void)
 {

@@ -53,7 +53,7 @@ extern bool preTerminationRequested;
 #define QUALITY_DEFAULT    75
 
 #define MIN_SCREEN_INTERVAL_US 16666
-#define LOOK_INTERVAL_US   20000
+#define LOOK_INTERVAL_US   16666
 #define FRAME_POLL_NS      (1000 * 1000LL)
 #define SAME_FRAME_RESEND_US 500000
 #define MAX_COPY_RETRIES   2
@@ -68,6 +68,10 @@ extern bool preTerminationRequested;
 #define CONTROL_POLL_INTERVAL_MS 10
 #define LINK_CHECK_INTERVAL_US 1000000
 #define LINK_DOWN_SLEEP_NS (100 * 1000 * 1000LL)
+#define OLD_CAPTURE_INTERVAL_US 200000
+#define OLD_ENCODER_REST_FACTOR 3
+#define OLD_ENCODER_THREAD_PRIO 0x3F
+#define OLD_SENDER_THREAD_PRIO 0x3E
 
 #define FPS_WINDOW_SECONDS 10
 #define HISTORY_SECONDS    (FPS_WINDOW_SECONDS + 1)
@@ -101,6 +105,7 @@ extern bool preTerminationRequested;
 #define VRAM_VA            0x1F000000
 #define FCRAM_PA           0x20000000
 #define FCRAM_END          0x30000000
+#define OLD_FCRAM_END      0x28000000
 
 #define TICKS_PER_US       (SYSCLOCK_ARM11 / 1000000)
 
@@ -146,6 +151,7 @@ static SavedViewer savedViewer;
 static bool savedViewerRead;
 
 static s64 clockStateBefore = -1;
+static u64 oldNextCaptureTick;
 
 static inline u32 ticksToUs(u64 ticks)
 {
@@ -328,6 +334,8 @@ void RemotePlay_SaveViewer(void)
 
 static bool cpuIsFast(void)
 {
+    if (!isN3DS)
+        return false;
     s64 clk = 0, l2 = 0;
     svcGetSystemInfo(&clk, 0x10001, 0);
     svcGetSystemInfo(&l2, 0x10001, 2);
@@ -340,7 +348,7 @@ static bool cpuIsFast(void)
 
 static void raiseClock(void)
 {
-    if (!cpuIsFast())
+    if (isN3DS && !cpuIsFast())
     {
         svcKernelSetState(10, N3DS_CPU_FAST);
         cpuIsFast();
@@ -672,6 +680,12 @@ static inline u32 maxU32(u32 a, u32 b)
 
 static void encoderSpent(u32 kind, u64 from, u64 to)
 {
+    if (!isN3DS && kind == ENC_BUSY && to >= from)
+    {
+        u64 interval = from + (u64)OLD_CAPTURE_INTERVAL_US * TICKS_PER_US;
+        u64 rested = to + (to - from) * OLD_ENCODER_REST_FACTOR;
+        oldNextCaptureTick = interval > rested ? interval : rested;
+    }
     u64 oldest = to > (u64)(HISTORY_SECONDS - 1) * SYSCLOCK_ARM11 ? to - (u64)(HISTORY_SECONDS - 1) * SYSCLOCK_ARM11 : 0;
     if (from < oldest)
         from = oldest;
@@ -801,7 +815,8 @@ static bool captureOnce(bool top, Capture *c)
         return RpCopy_Rows(snapshot, CAPTURE_CAP, src, span, rows, stride, rowStep, rowBytes, &c->hash);
     }
 
-    if (pa >= FCRAM_PA && pa < FCRAM_END && span <= FCRAM_END - pa)
+    u32 fcramEnd = isN3DS ? FCRAM_END : OLD_FCRAM_END;
+    if (pa >= FCRAM_PA && pa < fcramEnd && span <= fcramEnd - pa)
     {
         svcFlushEntireDataCache();
         LightLock_Lock(&settingsLock);
@@ -867,23 +882,28 @@ static int sendFrame(const JpegSlot *slot)
 
         u64 now = svcGetSystemTick();
         u64 elapsed = now - snd.lastPacketTick;
-        if (elapsed < slot->packetIntervalTicks)
+        while (elapsed < slot->packetIntervalTicks && !stopRequested && !linkDown)
         {
-            svcSleepThread((s64)ticksToUs(slot->packetIntervalTicks - elapsed) * 1000);
+            u64 remaining = slot->packetIntervalTicks - elapsed;
+            svcSleepThread((s64)((remaining * 1000000000ULL + SYSCLOCK_ARM11 - 1) / SYSCLOCK_ARM11));
             u64 woke = svcGetSystemTick();
             sleepTicks += woke - now;
             now = woke;
+            elapsed = now - snd.lastPacketTick;
         }
+        if (stopRequested || linkDown)
+            break;
 
+        snd.lastPacketTick = now;
         int res = socSendto(videoSock, pkt, VIDEO_HEADER_SIZE + chunk, 0, (struct sockaddr *)&addr, sizeof(addr));
-        snd.lastPacketTick = svcGetSystemTick();
+        u64 sent = svcGetSystemTick();
         if (res != (int)(VIDEO_HEADER_SIZE + chunk))
         {
             statusIncrement(&status.sendErrors);
             return transient(res) ? 0 : -1;
         }
 
-        sendtoTicks += snd.lastPacketTick - now;
+        sendtoTicks += sent - now;
         packets++;
         pkt[3]++;
     }
@@ -912,7 +932,7 @@ static bool takeSettings(void)
         enc.destIp = ip;
         enc.topPriority = ((mode >> 8) & 0xFF) != 0;
         enc.priorityFactor = mode & 0xFF;
-        enc.packetIntervalTicks = (u64)SYSCLOCK_ARM11 * VIDEO_PACKET_SIZE / qos;
+        enc.packetIntervalTicks = ((u64)SYSCLOCK_ARM11 * VIDEO_PACKET_SIZE + qos - 1) / qos;
         if (quality != enc.requestedQuality)
         {
             enc.requestedQuality = (u8)quality;
@@ -951,6 +971,11 @@ static int pickScreen(void)
     while (!stopRequested && !preTerminationRequested)
     {
         u64 now = svcGetSystemTick();
+        if (!isN3DS && now < oldNextCaptureTick)
+        {
+            svcSleepThread(CONTROL_POLL_INTERVAL_MS * 1000 * 1000LL);
+            continue;
+        }
         if (enc.priorityFactor != 0 && enc.lowCredit >= enc.priorityFactor && screenReady(!prio, now))
             return !prio;
         if (screenReady(prio, now))
@@ -1364,7 +1389,8 @@ static Result freeEverything(void)
 {
     if (clockStateBefore >= 0)
     {
-        svcKernelSetState(10, (u32)clockStateBefore);
+        if (isN3DS)
+            svcKernelSetState(10, (u32)clockStateBefore);
         clockStateBefore = -1;
     }
 
@@ -1418,7 +1444,7 @@ Result RemotePlay_Start(void)
     Result res = -1;
     u32 tmp = 0;
     LightLock_Lock(&lifecycleLock);
-    if (preTerminationRequested || !isN3DS)
+    if (preTerminationRequested)
         goto done;
     if (running)
     {
@@ -1426,6 +1452,7 @@ Result RemotePlay_Start(void)
         goto done;
     }
     stopRequested = false;
+    oldNextCaptureTick = 0;
     LightLock_Lock(&settingsLock);
     memset(&status, 0, sizeof(status));
     status.state = REMOTEPLAY_WAITING;
@@ -1462,6 +1489,7 @@ Result RemotePlay_Start(void)
     }
     if (savedViewer.ip != 0)
         applySettings(savedViewer.ip, savedViewer.mode, savedViewer.quality, savedViewer.qos, true);
+    if (isN3DS)
     {
         s64 clk = 0, l2 = 0;
         svcGetSystemInfo(&clk, 0x10001, 0);
@@ -1469,18 +1497,29 @@ Result RemotePlay_Start(void)
         clockStateBefore = (l2 != 0 ? 2 : 0) | (clk != 268 ? 1 : 0);
         raiseClock();
     }
+    else
+    {
+        clockStateBefore = -1;
+        LightLock_Lock(&settingsLock);
+        status.clockMhz = 268;
+        status.l2Cache = false;
+        LightLock_Unlock(&settingsLock);
+    }
     running = true;
+    int videoCore = isN3DS ? VIDEO_THREAD_CORE : CORE_SYSTEM;
+    int senderPriority = isN3DS ? SENDER_THREAD_PRIO : OLD_SENDER_THREAD_PRIO;
+    int encoderPriority = isN3DS ? ENCODER_THREAD_PRIO : OLD_ENCODER_THREAD_PRIO;
     if (R_FAILED(res = MyThread_Create(&controlThread, controlThreadMain, buffers->controlStack,
                                        CONTROL_STACK_SIZE, CONTROL_THREAD_PRIO, CORE_SYSTEM)))
         goto fail;
     if (R_FAILED(res = MyThread_Create(&senderThread, senderThreadMain, buffers->senderStack,
-                                       SENDER_STACK_SIZE, SENDER_THREAD_PRIO, VIDEO_THREAD_CORE)))
+                                       SENDER_STACK_SIZE, senderPriority, videoCore)))
         goto fail;
     if (R_FAILED(res = MyThread_Create(&encoderThread, encoderThreadMain, buffers->encoderStack,
-                                       ENCODER_STACK_SIZE, ENCODER_THREAD_PRIO, VIDEO_THREAD_CORE)))
+                                       ENCODER_STACK_SIZE, encoderPriority, videoCore)))
         goto fail;
     if (R_FAILED(res = MyThread_Create(&audioThread, audioThreadMain, buffers->audioStack,
-                                       AUDIO_STACK_SIZE, AUDIO_THREAD_PRIO, VIDEO_THREAD_CORE)))
+                                       AUDIO_STACK_SIZE, AUDIO_THREAD_PRIO, videoCore)))
         goto fail;
     goto done;
 fail:

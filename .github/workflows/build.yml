@@ -43,6 +43,7 @@ jobs:
       - run: python3 tests/adorable_ntr.py
       - run: python3 tests/streaming_jpeg.py
       - run: python3 tests/streaming_platform.py
+      - run: python3 tests/streaming_old3ds.py
       - run: python3 tests/streaming_menu.py
       - run: python3 tests/plugin_payload.py
       - run: python3 tests/plugin_format.py

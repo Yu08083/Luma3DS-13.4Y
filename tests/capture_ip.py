@@ -77,7 +77,7 @@ prefix = function(prefix, 'Draw_FillRect', '''
 prefix += r'''
 static const char *lookupTranslation(const char *text)
 {
- return strcmp(text,"Rosalina menu")==0 ? "Rosalinaメニュー" : text;
+ return strcmp(text,"Rosalina menu")==0 ? "Rosalina繝｡繝九Η繝ｼ" : text;
 }
 static bool japanese;
 '''
@@ -151,13 +151,13 @@ int main(void)
  cachedIp=0;testNow=4000;draw(&rosalinaMenu,&state,true);CHECK(has("IP: --")&&!has("0.0.0.0"));
  cachedIp=UINT32_MAX;testNow=5000;draw(&rosalinaMenu,&state,true);CHECK(has("IP: --")&&!has("255.255.255.255"));
  captureRunning=false;unsigned reads=cacheReads;draw(&rosalinaMenu,&state,false);CHECK(!has("IP: --")&&cacheReads==reads&&captureAreaCleared());frame("stopped-cleared");
- isN3DS=false;captureRunning=true;state.valid=false;draw(&rosalinaMenu,&state,false);CHECK(!has("IP: --")&&cacheReads==reads);
+ isN3DS=false;captureRunning=true;state.valid=false;draw(&rosalinaMenu,&state,false);CHECK(has("IP: --")&&cacheReads==reads+1);geometry();frame("old3ds-visible");reads=cacheReads;
  isN3DS=true;cachedIp=0xFEFFFFFF;state.valid=false;draw(&submenu,&state,false);CHECK(!has("255.255.255.254")&&cacheReads==reads);
  for(unsigned language=0;language<2;language++)for(unsigned safe=0;safe<2;safe++)for(unsigned theme=0;theme<2;theme++){
   japanese=language;g_safeMode=safe;themeEnabled=theme;state.valid=false;
   menuIsRelease=false;menuVersionLoaded=true;batteryTemperature=255;batteryVoltage=5.25f;batteryPercentage=100;
   testNow+=1000;draw(&rosalinaMenu,&state,true);CHECK(has("255.255.255.254"));geometry();
-  CHECK(has("Luma3DS ver.y16-0000002a"));
+  CHECK(has("Luma3DS ver.y17-0000002a"));
   char name[64];snprintf(name,sizeof(name),"language%u-safe%u-theme%u",language,safe,theme);frame(name);
  }
  char address[18];memset(address,0x7A,sizeof(address));
