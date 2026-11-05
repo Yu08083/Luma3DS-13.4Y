@@ -54,10 +54,13 @@ for(unsigned mode=0;mode<4;++mode){resetModel(false);CHECK(!RemotePlay_Start());
 static void jpeg(bool newModel,bool top){
 resetModel(newModel);CHECK(!RemotePlay_Start());realJpeg=true;applySettings(0x04030201,top?0x100:0,90,QOS_DEFAULT,false);CHECK(takeSettings());u32 rows=top?400:320;u8 *pixels=(u8*)(uintptr_t)(top?0x1f010000:0x1f210000);for(u32 row=0;row<rows;++row)for(u32 col=0;col<240;++col){u32 offset=row*720+col*3;pixels[offset]=(u8)(((col+row)/40)*10);pixels[offset+1]=(u8)((row/40)*20);pixels[offset+2]=(u8)((col/24)*20);}if(top){GPU_FB_TOP_FMT=RPJPEG_FMT_BGR8|BIT(6);GPU_FB_TOP_STRIDE=720;}else{GPU_FB_BOTTOM_FMT=RPJPEG_FMT_BGR8;GPU_FB_BOTTOM_STRIDE=720;}Capture capture;copyTop=top;CHECK(captureScreen(top,&capture)&&capture.rows==rows&&capture.pitch==720&&capture.format==RPJPEG_FMT_BGR8);CHECK(!memcmp(capture.pixels,pixels,rows*720));JpegSlot *slot=&buffers->slots[0];u32 bytes=encodeCapture(slot,&capture,&enc.screens[top]);CHECK(bytes>1000&&bytes<JPEG_SLOT_CAP&&enc.jpeg.quality==90&&enc.screens[top].quality==90&&enc.requestedQuality==90);char name[40];snprintf(name,sizeof(name),"%s-%s-q90.jpg",newModel?"new":"old",top?"top":"bottom");FILE *file=fopen(name,"wb");CHECK(file&&fwrite(slot->data,1,bytes,file)==bytes&&!fclose(file));realJpeg=false;CHECK(!RemotePlay_Stop());
 }
+static void menuJpeg(bool newModel){
+resetModel(newModel);CHECK(!RemotePlay_Start());realJpeg=true;applySettings(0x04030201,0,90,QOS_DEFAULT,false);CHECK(takeSettings());Draw_Lock();Draw_SetupFramebuffer();Draw_InvalidateFramebuffer();u16 *pixels=FB_BOTTOM_VRAM_ADDR;for(u32 row=0;row<320;++row)for(u32 col=0;col<240;++col)pixels[row*240+col]=(u16)((col/24*3)<<11|(row/40*7)<<5|(row+col)/40*2);Draw_FlushFramebuffer();Capture capture;copyTop=false;CHECK(captureScreen(false,&capture)&&capture.rows==320&&capture.pitch==480&&capture.format==RPJPEG_FMT_RGB565&&capture.pa==FB_BOTTOM_VRAM_PA&&drawDepth==1);CHECK(!memcmp(capture.pixels,pixels,FB_BOTTOM_SIZE));Draw_Unlock();JpegSlot *slot=&buffers->slots[0];u32 bytes=encodeCapture(slot,&capture,&enc.screens[0]);CHECK(bytes>1000&&bytes<JPEG_SLOT_CAP&&enc.jpeg.quality==90);char name[40];snprintf(name,sizeof(name),"%s-menu-q90.jpg",newModel?"new":"old");FILE *file=fopen(name,"wb");CHECK(file&&fwrite(slot->data,1,bytes,file)==bytes&&!fclose(file));Draw_Lock();Draw_RestoreFramebuffer();Draw_Unlock();CHECK(captureScreen(false,&capture)&&capture.pa!=FB_BOTTOM_VRAM_PA);realJpeg=false;CHECK(!RemotePlay_Stop());
+}
 static void audio(bool newModel){
 resetModel(newModel);CHECK(!RemotePlay_Start());realDsp=true;*(vu16*)(uintptr_t)0x1ff57ffe=100;*(vu16*)(uintptr_t)0x1ff77ffe=101;memset((void*)(uintptr_t)0x1ff50a80,0x12,640);memset((void*)(uintptr_t)0x1ff70a80,0x34,640);audioSock=openAudioSocket();CHECK(audioSock==42);startPlayer(0x04030201,htons(8002));aud.lastHelloTick=svcGetSystemTick();*(vu16*)(uintptr_t)0x1ff57ffe=102;*(vu16*)(uintptr_t)0x1ff77ffe=103;stopAfterSleeps=1;audioThreadMain();CHECK(stopRequested&&audioPackets==1&&status.audioFrames==2&&audioWireSize==1292&&dspInvalidates>0);CHECK(!memcmp(audioWire,"L2AU\x01\x00\x02\x00\x66\x00\x00\x00",12));CHECK(audioDestination.sin_addr.s_addr==0x04030201&&audioDestination.sin_port==htons(8002));for(u32 i=0;i<640;++i)CHECK(audioWire[12+i]==0x12&&audioWire[652+i]==0x34);realDsp=false;CHECK(!RemotePlay_Stop());
 }
-int main(void){CHECK(OLD_CAPTURE_INTERVAL_US==200000&&OLD_ENCODER_REST_FACTOR==3&&OLD_ENCODER_THREAD_PRIO==0x3F&&OLD_SENDER_THREAD_PRIO==0x3E&&AUDIO_THREAD_PRIO==0x2E&&VIDEO_THREAD_CORE==3);CHECK(commonRegressionMain()==0);mapAt(0x1ff50000,0x30000);for(unsigned newModel=0;newModel<2;++newModel){failures(newModel!=0);profile(newModel!=0);jpeg(newModel!=0,true);jpeg(newModel!=0,false);audio(newModel!=0);}encoderPaths();printf("old3ds %u %u %u %u %u\n",checks,statusAccesses,historyAccesses,dspInvalidates,deadlineSleeps);return 0;}
+int main(void){CHECK(OLD_CAPTURE_INTERVAL_US==200000&&OLD_ENCODER_REST_FACTOR==3&&OLD_ENCODER_THREAD_PRIO==0x3F&&OLD_SENDER_THREAD_PRIO==0x3E&&AUDIO_THREAD_PRIO==0x2E&&VIDEO_THREAD_CORE==3);CHECK(commonRegressionMain()==0);mapAt(0x1ff50000,0x30000);for(unsigned newModel=0;newModel<2;++newModel){failures(newModel!=0);profile(newModel!=0);jpeg(newModel!=0,true);jpeg(newModel!=0,false);menuJpeg(newModel!=0);audio(newModel!=0);}encoderPaths();printf("old3ds %u %u %u %u %u\n",checks,statusAccesses,historyAccesses,dspInvalidates,deadlineSleeps);return 0;}
 '''
 
 
@@ -84,7 +87,7 @@ def main():
     actual = actual.replace('buffers->encHistory', '((EncSecond *)historyAccess(buffers->encHistory))')
     actual = actual.replace('buffers->sndHistory', '((SndSecond *)historyAccess(buffers->sndHistory))')
     guards = '\n#undef status\nstatic RemotePlayStatus *statusAccess(void){CHECK(settingsLock==0);++statusAccesses;return &rawStatus;}\nstatic u32 *statusCounterAccess(u32 *counter){CHECK(settingsLock==0&&(uintptr_t)counter>=(uintptr_t)&rawStatus&&(uintptr_t)counter+sizeof(*counter)<=(uintptr_t)&rawStatus+sizeof(rawStatus));++statusAccesses;return counter;}\nstatic void *historyAccess(void *history){CHECK(settingsLock==0);++historyAccesses;return history;}\n#define status rawStatus\n'
-    selected = '\n'.join(shared.extract(draw, name) for name in ['Draw_IsFramebufferActive', 'Draw_SetupFramebuffer', 'Draw_RestoreFramebuffer', 'Draw_GetCurrentFramebufferAddress'])
+    selected = '\n'.join(shared.extract(draw, name) for name in ['Draw_BeginFramebufferWrite', 'Draw_EndFramebufferWrite', 'Draw_GetFramebufferGeneration', 'Draw_IsFramebufferActive', 'Draw_SetupFramebuffer', 'Draw_RestoreFramebuffer', 'Draw_GetCurrentFramebufferAddress'])
     prefix = shared.PREFIX.replace('static void svcSleepThread(', 'static void baseSleepThread(')
     suffix = shared.SUFFIX.replace('int main(void)', 'static int commonRegressionMain(void)')
     suffix = replace_function(shared, suffix, 'RpJpeg_SetQuality', 'void RpJpeg_SetQuality(RpJpeg *jpeg,int quality){RealRpJpeg_SetQuality(jpeg,quality);}')
@@ -119,7 +122,7 @@ def main():
     marker, checks, status_accesses, history_accesses, dsp_invalidates, deadline_sleeps = result.stdout.splitlines()[-1].split()
     assert marker == 'old3ds'
     images = []
-    for screen, rows in [('top', 400), ('bottom', 320)]:
+    for screen, rows in [('top', 400), ('bottom', 320), ('menu', 320)]:
         old = (OUT / ('old-' + screen + '-q90.jpg')).read_bytes()
         new = (OUT / ('new-' + screen + '-q90.jpg')).read_bytes()
         assert old == new, screen + ' differs by hardware model'
@@ -127,6 +130,11 @@ def main():
         assert image.size == (240, rows) and image.layer[0][1:3] == (1, 1)
         pixels = image.convert('RGB').tobytes()
         reference = ((col // 24 * 20, row // 40 * 20, (col + row) // 40 * 10) for row in range(rows) for col in range(240))
+        if screen == 'menu':
+            def rgb565(row, col):
+                red, green, blue = col // 24 * 3, row // 40 * 7, (row + col) // 40 * 2
+                return ((red << 3) | (red >> 2), (green << 2) | (green >> 4), (blue << 3) | (blue >> 2))
+            reference = (rgb565(row, col) for row in range(rows) for col in range(240))
         error = sum(abs(value - expected) for value, expected in zip(pixels, (value for pixel in reference for value in pixel))) / (240 * rows * 3)
         assert error < 3, (screen, error)
         images.append(dict(screen=screen, native_width=240, native_height=rows, quality=90, sampling='444', old_new_identical=True, jpeg_sha256=hashlib.sha256(old).hexdigest(), mean_absolute_rgb_error=error))

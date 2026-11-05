@@ -73,7 +73,8 @@ struct in_addr {u32 s_addr;};struct sockaddr {u16 sa_family;char data[14];};stru
 #include "rp_kcopy.h"
 static unsigned checks,drawDepth,allocs,frees,socStarts,socStops,createCalls,joinCalls,copyCalls,flushes,closeCalls,nonblocks,clockRestores;
 static unsigned failStage,joinMask,copyChanges,metaChanges,formatChanges,selectorChanges,stopAfterSleeps,socExitFailures,jpegResult;
-static unsigned statusAccesses,historyAccesses;
+static unsigned statusAccesses,historyAccesses,drawChanges;
+static bool drawStartOnCopy,drawRestoreOnCopy;
 static bool stopOnCopy,stopOnEncode,stopOnSlotFreed,udpTransient;
 static volatile bool stopRequested;
 static LightLock settingsLock;
@@ -95,16 +96,21 @@ static u32 GPU_PSC0_CNT,GPU_PSC1_CNT,GPU_TRANSFER_CNT,GPU_CMDLIST_CNT,LCD_BOT_FI
 #define FB_BOTTOM_SIZE (320*240*2)
 #define SCREEN_BOT_HEIGHT 240
 #define LCD_FILLCOLOR_ENABLE (1u<<24)
-static bool framebufferActive;
+static volatile bool framebufferActive;
+static volatile u32 framebufferGeneration;
+static bool framebufferReady=true;
+static void Draw_BeginFramebufferWrite(void);
+static void Draw_EndFramebufferWrite(void);
+void Draw_RestoreFramebuffer(void);
 static u8 drawCache[FB_BOTTOM_SIZE];
 static void *framebufferCache=drawCache;
 static u32 framebufferCacheSize=sizeof(drawCache),gpuSavedFramebufferAddr1,gpuSavedFramebufferAddr2,gpuSavedFramebufferFormat,gpuSavedFramebufferStride,gpuSavedFramebufferSelect,gpuSavedFillColor;
 #define CHECK(v) do{++checks;if(!(v)){fprintf(stderr,"line %d: %s\n",__LINE__,#v);exit(1);}}while(0)
 static void Draw_Lock(void){CHECK(!drawDepth&&settingsLock==1);++drawDepth;}
 static void Draw_Unlock(void){CHECK(drawDepth==1);--drawDepth;}
-static void Draw_InvalidateFramebuffer(void){}
-static void Draw_FlushFramebuffer(void){++flushes;}
-static void Draw_ClearFramebuffer(void){memset(FB_BOTTOM_VRAM_ADDR,0x34,FB_BOTTOM_SIZE);}
+static void Draw_InvalidateFramebuffer(void){Draw_BeginFramebufferWrite();}
+static void Draw_FlushFramebuffer(void){CHECK(framebufferGeneration&1u);++flushes;Draw_EndFramebufferWrite();}
+static void Draw_ClearFramebuffer(void){Draw_InvalidateFramebuffer();memset(FB_BOTTOM_VRAM_ADDR,0x34,FB_BOTTOM_SIZE);}
 static void LightLock_Lock(LightLock *lock){CHECK(*lock==1);*lock=0;}
 static void LightLock_Unlock(LightLock *lock){CHECK(*lock==0);*lock=1;}
 static void LightEvent_Init(LightEvent *event,int reset){(void)reset;*event=0;}
@@ -115,8 +121,8 @@ static void svcSleepThread(s64 time){CHECK(time>=0&&settingsLock==1);mockTick+=(
 static u32 osGetKernelVersion(void){return 44<<8;}
 static Result svcGetSystemInfo(s64 *value,u32 type,u32 selector){CHECK(!drawDepth&&isN3DS&&type==0x10001);*value=selector==0?804:1;return 0;}
 static Result svcKernelSetState(u32 op,u32 value){CHECK(!drawDepth&&isN3DS&&op==10);if(value==3)++clockRestores;return 0;}
-static void svcFlushEntireDataCache(void){CHECK(drawDepth==1);++flushes;}
-static Result svcFlushProcessDataCache(Handle h,u32 address,u32 bytes){CHECK(drawDepth==1&&h==CUR_PROCESS_HANDLE&&address>=0x1f000000&&bytes<=0x600000);++flushes;return 0;}
+static void svcFlushEntireDataCache(void){CHECK(drawDepth<=1);++flushes;}
+static Result svcFlushProcessDataCache(Handle h,u32 address,u32 bytes){CHECK(drawDepth<=1&&h==CUR_PROCESS_HANDLE&&address>=0x1f000000&&bytes<=0x600000);++flushes;return 0;}
 static Result svcControlMemoryEx(u32 *,u32,u32,u32,u32,u32,bool);
 static Result svcControlMemory(u32 *,u32,u32,u32,u32,u32);
 static Result MyThread_Create(MyThread *,void (*)(void),void *,u32,int,int);
@@ -179,12 +185,16 @@ u32 DspAudio_Poll(DspAudioReader *reader,DspAudioBlock out[2]){CHECK(!drawDepth&
 uint32_t RpJpeg_BytesPerPixel(int format){return format==0?4:format==1?3:format>=2&&format<=4?2:0;}
 void RpJpeg_SetQuality(RpJpeg *jpeg,int quality){jpeg->quality=quality;}
 uint32_t RpJpeg_Encode(const RpJpeg *jpeg,u8 *out,u32 outCap,const u8 *src,u32 srcCap,u32 width,u32 rows,u32 stride,u32 rowStep,int format){CHECK(!drawDepth&&settingsLock==1&&jpeg&&out&&src&&outCap==JPEG_SLOT_CAP&&srcCap==CAPTURE_CAP&&width==240&&(rows==320||rows==400)&&stride==width*RpJpeg_BytesPerPixel(format)&&rowStep==1);if(stopOnEncode)stopRequested=true;return jpegResult;}
-static void afterCopy(void){if(copyChanges){--copyChanges;if(copyTop)GPU_FB_TOP_LEFT_ADDR_1^=0x1000;else GPU_FB_BOTTOM_ADDR_1^=0x1000;}if(metaChanges){--metaChanges;if(copyTop)GPU_FB_TOP_STRIDE+=4;else GPU_FB_BOTTOM_STRIDE+=4;}if(formatChanges){--formatChanges;if(copyTop)GPU_FB_TOP_FMT=(GPU_FB_TOP_FMT&~7u)|((GPU_FB_TOP_FMT&7u)?0:2);else GPU_FB_BOTTOM_FMT=(GPU_FB_BOTTOM_FMT&~7u)|((GPU_FB_BOTTOM_FMT&7u)?0:2);}if(selectorChanges){--selectorChanges;if(copyTop)GPU_FB_TOP_SEL^=1;else GPU_FB_BOTTOM_SEL^=1;}}
-bool RpCopy_Rows(void *dst,u32 dstCap,const void *src,u32 srcCap,u32 rows,u32 stride,u32 rowStep,u32 rowBytes,u32 *hash){CHECK(drawDepth==1&&settingsLock==1&&dst==buffers->capture&&dstCap==CAPTURE_CAP&&srcCap>=(rows-1)*stride*rowStep+rowBytes&&src&&(rows==320||rows==400)&&rowStep>=1&&rowStep<=2&&rows*rowBytes<=CAPTURE_CAP);++copyCalls;*hash=123;afterCopy();if(stopOnCopy)stopRequested=true;return true;}
-bool RpKernelCopy_Rows(void *dst,u32 cap,u32 source,u32 rows,u32 stride,u32 step,u32 bytes,u32 *hash){CHECK(drawDepth==1&&source>=0xe0000000&&source<0xf0000000);return RpCopy_Rows(dst,cap,(void*)(uintptr_t)source,(rows-1)*stride*step+bytes,rows,stride,step,bytes,hash);}
-static void reset(void){CHECK(!allocationLive&&!buffers&&!controlThread.handle&&!senderThread.handle&&!encoderThread.handle&&!audioThread.handle);failStage=joinMask=copyCalls=copyChanges=metaChanges=createCalls=joinCalls=0;allocs=frees=socStarts=socStops=closeCalls=nonblocks=clockRestores=0;selectorChanges=formatChanges=jpegResult=stopAfterSleeps=socExitFailures=dspInits=dspPolls=audioBinds=0;stopOnCopy=stopOnEncode=stopOnSlotFreed=udpTransient=false;memset(alive,0,sizeof(alive));isN3DS=true;preTerminationRequested=false;running=stopRequested=false;framebufferActive=false;sleeping=false;settingsLock=lifecycleLock=1;allocationAddress=0x0e100000;GPU_FB_TOP_FMT=2|BIT(6);GPU_FB_BOTTOM_FMT=2;GPU_FB_TOP_STRIDE=GPU_FB_BOTTOM_STRIDE=480;GPU_FB_TOP_SEL=GPU_FB_BOTTOM_SEL=0;GPU_FB_TOP_LEFT_ADDR_1=0x18010000;GPU_FB_TOP_LEFT_ADDR_2=0x18110000;GPU_FB_TOP_RIGHT_ADDR_1=0x18010000;GPU_FB_TOP_RIGHT_ADDR_2=0x18110000;GPU_FB_BOTTOM_ADDR_1=0x18210000;GPU_FB_BOTTOM_ADDR_2=0x18310000;}
+static void afterCopy(void){if(drawChanges){--drawChanges;framebufferGeneration+=2;}if(drawStartOnCopy){drawStartOnCopy=false;Draw_BeginFramebufferWrite();}if(drawRestoreOnCopy){drawRestoreOnCopy=false;Draw_RestoreFramebuffer();}if(copyChanges){--copyChanges;if(copyTop)GPU_FB_TOP_LEFT_ADDR_1^=0x1000;else GPU_FB_BOTTOM_ADDR_1^=0x1000;}if(metaChanges){--metaChanges;if(copyTop)GPU_FB_TOP_STRIDE+=4;else GPU_FB_BOTTOM_STRIDE+=4;}if(formatChanges){--formatChanges;if(copyTop)GPU_FB_TOP_FMT=(GPU_FB_TOP_FMT&~7u)|((GPU_FB_TOP_FMT&7u)?0:2);else GPU_FB_BOTTOM_FMT=(GPU_FB_BOTTOM_FMT&~7u)|((GPU_FB_BOTTOM_FMT&7u)?0:2);}if(selectorChanges){--selectorChanges;if(copyTop)GPU_FB_TOP_SEL^=1;else GPU_FB_BOTTOM_SEL^=1;}}
+bool RpCopy_Rows(void *dst,u32 dstCap,const void *src,u32 srcCap,u32 rows,u32 stride,u32 rowStep,u32 rowBytes,u32 *hash){CHECK(drawDepth<=1&&settingsLock==1&&dst==buffers->capture&&dstCap==CAPTURE_CAP&&srcCap>=(rows-1)*stride*rowStep+rowBytes&&src&&(rows==320||rows==400)&&rowStep>=1&&rowStep<=2&&rows*rowBytes<=CAPTURE_CAP);++copyCalls;*hash=123;afterCopy();if(stopOnCopy)stopRequested=true;return true;}
+bool RpKernelCopy_Rows(void *dst,u32 cap,u32 source,u32 rows,u32 stride,u32 step,u32 bytes,u32 *hash){CHECK(drawDepth<=1&&source>=0xe0000000&&source<0xf0000000);return RpCopy_Rows(dst,cap,(void*)(uintptr_t)source,(rows-1)*stride*step+bytes,rows,stride,step,bytes,hash);}
+static void reset(void){CHECK(!allocationLive&&!buffers&&!controlThread.handle&&!senderThread.handle&&!encoderThread.handle&&!audioThread.handle);failStage=joinMask=copyCalls=copyChanges=metaChanges=createCalls=joinCalls=0;allocs=frees=socStarts=socStops=closeCalls=nonblocks=clockRestores=0;selectorChanges=formatChanges=jpegResult=stopAfterSleeps=socExitFailures=dspInits=dspPolls=audioBinds=0;stopOnCopy=stopOnEncode=stopOnSlotFreed=udpTransient=false;memset(alive,0,sizeof(alive));isN3DS=true;preTerminationRequested=false;running=stopRequested=false;framebufferActive=false;framebufferGeneration=0;framebufferReady=true;drawChanges=0;drawStartOnCopy=drawRestoreOnCopy=false;sleeping=false;settingsLock=lifecycleLock=1;allocationAddress=0x0e100000;GPU_FB_TOP_FMT=2|BIT(6);GPU_FB_BOTTOM_FMT=2;GPU_FB_TOP_STRIDE=GPU_FB_BOTTOM_STRIDE=480;GPU_FB_TOP_SEL=GPU_FB_BOTTOM_SEL=0;GPU_FB_TOP_LEFT_ADDR_1=0x18010000;GPU_FB_TOP_LEFT_ADDR_2=0x18110000;GPU_FB_TOP_RIGHT_ADDR_1=0x18010000;GPU_FB_TOP_RIGHT_ADDR_2=0x18110000;GPU_FB_BOTTOM_ADDR_1=0x18210000;GPU_FB_BOTTOM_ADDR_2=0x18310000;}
 static void captures(void){Capture c;copyTop=true;CHECK(captureScreen(true,&c)&&c.pa==GPU_FB_TOP_LEFT_ADDR_1&&c.rows==400&&!drawDepth);GPU_FB_TOP_SEL=1;CHECK(captureScreen(true,&c)&&c.pa==GPU_FB_TOP_LEFT_ADDR_2);GPU_FB_TOP_SEL=0;GPU_FB_BOTTOM_SEL=1;CHECK(captureScreen(true,&c)&&c.pa==GPU_FB_TOP_LEFT_ADDR_1);copyTop=false;CHECK(captureScreen(false,&c)&&c.pa==GPU_FB_BOTTOM_ADDR_2&&c.rows==320);GPU_FB_BOTTOM_SEL=0;
-unsigned before=copyCalls;Draw_Lock();Draw_SetupFramebuffer();Draw_Unlock();CHECK(framebufferActive&&!captureScreen(false,&c)&&copyCalls==before);Draw_Lock();Draw_RestoreFramebuffer();Draw_Unlock();CHECK(!framebufferActive&&captureScreen(false,&c));
+unsigned before=copyCalls;Draw_Lock();Draw_SetupFramebuffer();CHECK(framebufferActive&&captureScreen(false,&c)&&copyCalls==before+1&&c.pa==FB_BOTTOM_VRAM_PA&&c.format==2&&c.rows==320&&c.pitch==480&&drawDepth==1);CHECK(captureScreen(true,&c));Draw_Unlock();
+Draw_BeginFramebufferWrite();before=copyCalls;CHECK(!captureScreen(false,&c)&&copyCalls==before);CHECK(captureScreen(true,&c));Draw_EndFramebufferWrite();CHECK(captureScreen(false,&c));
+drawChanges=1;before=copyCalls;CHECK(captureScreen(false,&c)&&copyCalls==before+2);drawChanges=3;before=copyCalls;CHECK(!captureScreen(false,&c)&&copyCalls==before+3);drawChanges=0;
+drawStartOnCopy=true;before=copyCalls;CHECK(!captureScreen(false,&c)&&copyCalls==before+1);Draw_EndFramebufferWrite();CHECK(captureScreen(false,&c));
+drawRestoreOnCopy=true;before=copyCalls;CHECK(captureScreen(false,&c)&&copyCalls==before+2&&!framebufferActive&&c.pa==GPU_FB_BOTTOM_ADDR_1);CHECK(!drawDepth);
 for(unsigned fmt=0;fmt<8;++fmt){copyTop=true;GPU_FB_TOP_FMT=fmt|BIT(6);GPU_FB_TOP_STRIDE=fmt<5?240*RpJpeg_BytesPerPixel(fmt):480;before=copyCalls;CHECK(captureScreen(true,&c)==(fmt<5));CHECK(copyCalls-before==(fmt<5));}
 GPU_FB_TOP_FMT=2|BIT(6);for(unsigned i=0;i<4;++i){const u32 bad[]={0,479,4097,UINT32_MAX};GPU_FB_TOP_STRIDE=bad[i];before=copyCalls;CHECK(!captureScreen(true,&c)&&copyCalls==before);}GPU_FB_TOP_STRIDE=480;
 for(unsigned i=0;i<4;++i){const u32 bad[]={0,0x17ffffff,0x185ffffc,0x2ffffffc};GPU_FB_TOP_LEFT_ADDR_1=bad[i];before=copyCalls;CHECK(!captureScreen(true,&c)&&copyCalls==before);}GPU_FB_TOP_LEFT_ADDR_1=0x20010000;CHECK(captureScreen(true,&c)&&status.lastFromFcram);GPU_FB_TOP_LEFT_ADDR_1=0x18010000;
@@ -224,7 +234,7 @@ def arm_proof(compiler,ctrulib,env):
     directory.mkdir(exist_ok=True)
     flags=['-std=gnu11','-Oz','-Wall','-Wextra','-Werror','-ffunction-sections','-fdata-sections','-fstack-usage','-march=armv6k','-mtune=mpcore','-mfpu=vfp','-mfloat-abi=hard','-mtp=soft','-D__3DS__','-I'+str(ROS/'include'),'-I'+str(ctrulib/'include')]
     commands=[]
-    for name in ['remote_play','rp_jpeg','rp_kcopy','minisoc','dsp_audio']:
+    for name in ['remote_play','rp_jpeg','rp_kcopy','minisoc','dsp_audio','draw']:
         command=[str(compiler),*flags,'-c',str(ROS/'source'/(name+'.c')),'-o',str(directory/(name+'.o'))]
         result=subprocess.run(command,env=env,capture_output=True,text=True)
         assert result.returncode==0,result.stdout+result.stderr
@@ -244,7 +254,7 @@ def arm_proof(compiler,ctrulib,env):
     layout=dict(zip(keys,values))
     assert layout['page_aligned_buffers_size']<=0xb0000 and layout['capture_bytes']==384000
     usage={}
-    for name in ['remote_play','rp_jpeg','rp_kcopy','minisoc','dsp_audio']:
+    for name in ['remote_play','rp_jpeg','rp_kcopy','minisoc','dsp_audio','draw']:
         for row in (directory/(name+'.su')).read_text().splitlines():
             fields=row.split('\t')
             if len(fields)<3:continue
@@ -256,7 +266,7 @@ def arm_proof(compiler,ctrulib,env):
     assert max(encode,copy)+4096<layout['encoder_stack']
     audio=frame('audioThreadMain')+max(frame('DspAudio_Poll')+frame('readFrameCounter'),frame('checkHello')+frame('startPlayer')+frame('DspAudio_ReaderInit'),frame('addFrame')+frame('sendAudio'))
     assert audio+4096<layout['audio_stack']
-    return dict(result='pass',translation_units=5,layout=layout,encoder_known_C_chain_bytes=encode,copy_known_C_chain_bytes=copy,encoder_reserved_boundary_bytes=4096,audio_known_C_chain_bytes=audio,audio_reserved_boundary_bytes=4096,stack_usage=usage,commands=commands,boundary='ARM compiler stack frames plus explicit C call chains; OS/libctru and IRQ stacks remain platform boundaries')
+    return dict(result='pass',translation_units=6,layout=layout,encoder_known_C_chain_bytes=encode,copy_known_C_chain_bytes=copy,encoder_reserved_boundary_bytes=4096,audio_known_C_chain_bytes=audio,audio_reserved_boundary_bytes=4096,stack_usage=usage,commands=commands,boundary='ARM compiler stack frames plus explicit C call chains; OS/libctru and IRQ stacks remain platform boundaries')
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--firm',type=Path);parser.add_argument('--arm-cc',type=Path);parser.add_argument('--ctrulib',type=Path);args=parser.parse_args()
@@ -271,7 +281,7 @@ def main():
     actual=actual.replace('buffers->encHistory','((EncSecond *)historyAccess(buffers->encHistory))')
     actual=actual.replace('buffers->sndHistory','((SndSecond *)historyAccess(buffers->sndHistory))')
     guards='\n#undef status\nstatic RemotePlayStatus *statusAccess(void){CHECK(settingsLock==0);++statusAccesses;return &rawStatus;}\nstatic u32 *statusCounterAccess(u32 *counter){CHECK(settingsLock==0&&(uintptr_t)counter>=(uintptr_t)&rawStatus&&(uintptr_t)counter+sizeof(*counter)<=(uintptr_t)&rawStatus+sizeof(rawStatus));++statusAccesses;return counter;}\nstatic void *historyAccess(void *history){CHECK(settingsLock==0);++historyAccesses;return history;}\n#define status rawStatus\n'
-    selected='\n'.join(extract(draw,name) for name in ['Draw_IsFramebufferActive','Draw_SetupFramebuffer','Draw_RestoreFramebuffer','Draw_GetCurrentFramebufferAddress'])
+    selected='\n'.join(extract(draw,name) for name in ['Draw_BeginFramebufferWrite','Draw_EndFramebufferWrite','Draw_GetFramebufferGeneration','Draw_IsFramebufferActive','Draw_SetupFramebuffer','Draw_RestoreFramebuffer','Draw_GetCurrentFramebufferAddress'])
     (OUT/'fixture.c').write_bytes((PREFIX+selected+actual+guards+SUFFIX).encode())
     compiler=os.environ.get('CC','cc')
     if not shutil.which(compiler) and os.name=='nt':compiler='C:/msys64/ucrt64/bin/gcc.exe'

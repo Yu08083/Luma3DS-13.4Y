@@ -831,27 +831,20 @@ static bool captureOnce(bool top, Capture *c)
 
 static bool captureScreen(bool top, Capture *c)
 {
-    bool captured = false;
-    Draw_Lock();
-    if (!Draw_IsFramebufferActive() && !stopRequested && !preTerminationRequested)
+    for (u32 attempt = 0; attempt <= MAX_COPY_RETRIES; attempt++)
     {
-        for (u32 attempt = 0; attempt <= MAX_COPY_RETRIES; attempt++)
-        {
-            if (!captureOnce(top, c))
-                break;
-            if (currentFramebufferPa(top) == c->pa
-                && (top ? GPU_FB_TOP_FMT : GPU_FB_BOTTOM_FMT) == c->formatReg
-                && (top ? GPU_FB_TOP_STRIDE : GPU_FB_BOTTOM_STRIDE) == c->sourceStride
-                && (top ? GPU_FB_TOP_SEL : GPU_FB_BOTTOM_SEL) == c->selector)
-            {
-                captured = true;
-                break;
-            }
-            statusIncrement(&status.tornCopies);
-        }
+        u32 generation = top ? 0 : Draw_GetFramebufferGeneration();
+        if ((generation & 1u) || stopRequested || preTerminationRequested || !captureOnce(top, c))
+            return false;
+        if (currentFramebufferPa(top) == c->pa
+            && (top ? GPU_FB_TOP_FMT : GPU_FB_BOTTOM_FMT) == c->formatReg
+            && (top ? GPU_FB_TOP_STRIDE : GPU_FB_BOTTOM_STRIDE) == c->sourceStride
+            && (top ? GPU_FB_TOP_SEL : GPU_FB_BOTTOM_SEL) == c->selector
+            && (top || Draw_GetFramebufferGeneration() == generation))
+            return true;
+        statusIncrement(&status.tornCopies);
     }
-    Draw_Unlock();
-    return captured;
+    return false;
 }
 
 static int sendFrame(const JpegSlot *slot)

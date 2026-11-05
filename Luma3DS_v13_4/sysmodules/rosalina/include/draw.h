@@ -112,6 +112,7 @@ void *Draw_GetFramebufferCache(void);
 u32 Draw_GetFramebufferCacheSize(void);
 u32 Draw_SetupFramebuffer(void);
 bool Draw_IsFramebufferActive(void);
+u32 Draw_GetFramebufferGeneration(void);
 void Draw_RestoreFramebuffer(void);
 void Draw_FlushFramebuffer(void);
 u32 Draw_GetCurrentFramebufferAddress(bool top, bool left);

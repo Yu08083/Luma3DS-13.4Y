@@ -43,7 +43,8 @@ static u32 framebufferCacheSize;
 static void *framebufferCache;
 static RecursiveLock lock;
 static u32 gpuSavedFramebufferSelect;
-static bool framebufferActive;
+static volatile bool framebufferActive;
+static bool framebufferReady = true;
 
 void Draw_Init(void)
 {
@@ -66,6 +67,24 @@ static u16 drawMenuRowBuffer[SCREEN_BOT_WIDTH * SPACING_Y];
 static u32 drawMenuRowY;
 static bool drawMenuRowActive;
 static const u16 *drawMenuBackground;
+static volatile u32 framebufferGeneration;
+
+static void Draw_BeginFramebufferWrite(void)
+{
+    if (!(framebufferGeneration & 1u))
+    {
+        ++framebufferGeneration;
+        __dmb();
+    }
+}
+
+u32 Draw_GetFramebufferGeneration(void)
+{
+    __dmb();
+    u32 generation = framebufferGeneration;
+    __dmb();
+    return generation;
+}
 
 void Draw_SetMenuBackground(const u16 *pixels)
 {
@@ -81,6 +100,7 @@ static u16 Draw_BackgroundPixel(s32 x, s32 y)
 
 void Draw_InvalidateFramebuffer(void)
 {
+    Draw_BeginFramebufferWrite();
     drawDirtyFirst = 0;
     drawDirtyEnd = SCREEN_BOT_WIDTH;
 }
@@ -95,6 +115,7 @@ static void Draw_PutPixel(s32 x, s32 y, u32 color)
             drawMenuRowBuffer[x * SPACING_Y + SPACING_Y - ((u32)y - drawMenuRowY) - 1] = (u16)color;
         return;
     }
+    Draw_BeginFramebufferWrite();
     if((u32)x < drawDirtyFirst) drawDirtyFirst = (u32)x;
     if((u32)x + 1 > drawDirtyEnd) drawDirtyEnd = (u32)x + 1;
     volatile u16 *fb = (volatile u16 *)FB_BOTTOM_VRAM_ADDR;
@@ -109,6 +130,9 @@ void Draw_FillRect(u32 x, u32 y, u32 width, u32 height, u32 color)
         width = SCREEN_BOT_WIDTH - x;
     if (height > SCREEN_BOT_HEIGHT - y)
         height = SCREEN_BOT_HEIGHT - y;
+    if (!width || !height)
+        return;
+    Draw_BeginFramebufferWrite();
     if(x < drawDirtyFirst) drawDirtyFirst = x;
     if(x + width > drawDirtyEnd) drawDirtyEnd = x + width;
     volatile u16 *fb = (volatile u16 *)FB_BOTTOM_VRAM_ADDR;
@@ -205,11 +229,11 @@ void Draw_DrawMenuRow(u32 posY, u32 textColor, const char *text, u32 cursorColor
     if (mark)
         Draw_DrawCharacter(SCREEN_BOT_WIDTH - 16, posY, cursorColor, mark);
     drawMenuRowActive = false;
+    Draw_InvalidateFramebuffer();
     volatile u16 *fb = (volatile u16 *)FB_BOTTOM_VRAM_ADDR;
     for (u32 x = 0; x < SCREEN_BOT_WIDTH; ++x)
         memcpy((void *)(fb + x * SCREEN_BOT_HEIGHT + SCREEN_BOT_HEIGHT - posY - SPACING_Y),
                drawMenuRowBuffer + x * SPACING_Y, SPACING_Y * sizeof(u16));
-    Draw_InvalidateFramebuffer();
 }
 
 u32 Draw_DrawFormattedString(u32 posX, u32 posY, u32 color, const char *fmt, ...)
@@ -303,8 +327,19 @@ u32 Draw_GetFramebufferCacheSize(void)
     return framebufferCacheSize;
 }
 
+static void Draw_EndFramebufferWrite(void)
+{
+    if (framebufferReady && (framebufferGeneration & 1u))
+    {
+        __dmb();
+        ++framebufferGeneration;
+    }
+}
+
 u32 Draw_SetupFramebuffer(void)
 {
+    Draw_BeginFramebufferWrite();
+    framebufferReady = false;
     framebufferActive = true;
     while((GPU_PSC0_CNT | GPU_PSC1_CNT | GPU_TRANSFER_CNT | GPU_CMDLIST_CNT) & 1);
     Draw_InvalidateFramebuffer();
@@ -325,11 +360,15 @@ u32 Draw_SetupFramebuffer(void)
     GPU_FB_BOTTOM_STRIDE = SCREEN_BOT_HEIGHT * sizeof(u16);
     __dmb();
     LCD_BOT_FILLCOLOR = 0;
+    framebufferReady = true;
+    Draw_EndFramebufferWrite();
     return framebufferCacheSize;
 }
 
 void Draw_RestoreFramebuffer(void)
 {
+    Draw_BeginFramebufferWrite();
+    framebufferReady = false;
     LCD_BOT_FILLCOLOR = LCD_FILLCOLOR_ENABLE;
     __dmb();
     memcpy(FB_BOTTOM_VRAM_ADDR, framebufferCache, FB_BOTTOM_SIZE);
@@ -344,6 +383,8 @@ void Draw_RestoreFramebuffer(void)
     svcSleepThread(20 * 1000 * 1000LL);
     LCD_BOT_FILLCOLOR = gpuSavedFillColor;
     framebufferActive = false;
+    framebufferReady = true;
+    Draw_EndFramebufferWrite();
 }
 
 bool Draw_IsFramebufferActive(void)
@@ -385,6 +426,7 @@ void Draw_FlushFramebuffer(void)
     svcFlushProcessDataCache(CUR_PROCESS_HANDLE, (u32)FB_BOTTOM_VRAM_ADDR + offset, size);
     drawDirtyFirst = SCREEN_BOT_WIDTH;
     drawDirtyEnd = 0;
+    Draw_EndFramebufferWrite();
 }
 
 u32 Draw_GetCurrentFramebufferAddress(bool top, bool left)

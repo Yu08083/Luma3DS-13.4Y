@@ -52,6 +52,7 @@ typedef int32_t s32;
 '''
 
 rosalina = r'''
+#define __dmb() ((void)0)
 #define SCREEN_BOT_WIDTH 320
 #define SCREEN_BOT_HEIGHT 240
 #define SPACING_X 6

@@ -335,6 +335,7 @@ typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef int32_t s32;
+#define __dmb() ((void)0)
 #define SCREEN_BOT_WIDTH 320
 #define SCREEN_BOT_HEIGHT 240
 #define SPACING_X 6

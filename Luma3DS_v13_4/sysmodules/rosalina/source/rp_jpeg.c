@@ -230,6 +230,14 @@ static inline void fdct1d(int32_t *d, uint32_t s)
     d[7 * s] = z11 - z4;
 }
 
+static inline int32_t quantizeCoefficient(int32_t value, uint16_t reciprocal)
+{
+    uint32_t magnitude = ((uint32_t)(value < 0 ? -value : value) * reciprocal + 0x4000) >> 15;
+    if (magnitude > 1023)
+        magnitude = 1023;
+    return value < 0 ? -(int32_t)magnitude : (int32_t)magnitude;
+}
+
 static __attribute__((optimize("O2"))) int32_t encodeBlock(BitWriter *w, int32_t *blk, const uint16_t *recip, int32_t prevDc,
                            const HuffTable *dc, const HuffTable *ac)
 {
@@ -238,18 +246,8 @@ static __attribute__((optimize("O2"))) int32_t encodeBlock(BitWriter *w, int32_t
     for (uint32_t i = 0; i < 8; i++)
         fdct1d(blk + i, 8);
 
-    int32_t q[64];
-    for (uint32_t k = 0; k < 64; k++)
-    {
-        uint32_t i = zigzag[k];
-        int32_t v = blk[i];
-        uint32_t m = ((uint32_t)(v < 0 ? -v : v) * recip[i] + 0x4000) >> 15;
-        if (m > 1023)
-            m = 1023;
-        q[k] = v < 0 ? -(int32_t)m : (int32_t)m;
-    }
-
-    int32_t diff = q[0] - prevDc;
+    int32_t currentDc = quantizeCoefficient(blk[0], recip[0]);
+    int32_t diff = currentDc - prevDc;
     uint32_t mag = (uint32_t)(diff < 0 ? -diff : diff);
     uint32_t nbits = bitLength(mag);
     putBits(w, dc->code[nbits], dc->size[nbits]);
@@ -259,7 +257,8 @@ static __attribute__((optimize("O2"))) int32_t encodeBlock(BitWriter *w, int32_t
     uint32_t run = 0;
     for (uint32_t k = 1; k < 64; k++)
     {
-        int32_t v = q[k];
+        uint32_t i = zigzag[k];
+        int32_t v = quantizeCoefficient(blk[i], recip[i]);
         if (v == 0)
         {
             run++;
@@ -283,7 +282,7 @@ static __attribute__((optimize("O2"))) int32_t encodeBlock(BitWriter *w, int32_t
     if (run != 0)
         putBits(w, ac->code[0x00], ac->size[0x00]);
 
-    return q[0];
+    return currentDc;
 }
 
 static inline void loadPixels(const uint8_t *p, int format, uint8_t *r, uint8_t *g, uint8_t *b)

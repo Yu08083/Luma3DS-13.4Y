@@ -119,8 +119,6 @@ static void drawStatus(const StreamingView *view)
         Draw_DrawString(10, 166, g_textColor, Lang_Translate("Waiting for Wi-Fi."));
     else if(view->running)
         Draw_DrawString(10, 166, g_textColor, Lang_Translate("Receiver: NTR mode"));
-    if(view->running&&!view->offline)
-        Draw_DrawString(10, 188, g_textColor, Lang_Translate("Close Rosalina to stream video"));
     Draw_DrawString(10, 210, g_cursorColor,
                     Lang_Translate(view->running ? "A: stop      B: back" : "A: start     B: back"));
 }

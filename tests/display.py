@@ -46,12 +46,15 @@ static u16 g_menuBgColor;
 static u32 flushCount, flushBytes, lastOffset, sleepMs;
 static bool restoring;
 static bool framebufferActive;
+static bool framebufferReady = true;
+static volatile u32 framebufferGeneration;
 static bool checkRowCopy;
 static u32 rowCopies;
 #define __dmb() ((void)0)
 static void svcSleepThread(int64_t ns) { assert((LCD_BOT_BRIGHTNESS & ~0x3FFu) == (0x100A080u & ~0x3FFu)); sleepMs += (u32)(ns / 1000000); }
 static void svcFlushProcessDataCache(u32 process, u32 address, u32 size)
 {
+    assert(framebufferGeneration & 1u);
     assert(process == CUR_PROCESS_HANDLE);
     assert(address >= 0x10000000u && address + size <= 0x10000000u + FB_BOTTOM_SIZE);
     assert(address % 64 == 0 && size % 64 == 0);
@@ -64,6 +67,7 @@ static void *checkedCopy(void *dst, const void *src, size_t size)
 {
     if(checkRowCopy)
     {
+        assert(framebufferGeneration & 1u);
         assert(size == SPACING_Y * sizeof(u16));
         assert(dst == vram + (rowCopies * SCREEN_BOT_HEIGHT + SCREEN_BOT_HEIGHT - 30 - SPACING_Y) * sizeof(u16));
         if(rowCopies == 0)
@@ -72,6 +76,7 @@ static void *checkedCopy(void *dst, const void *src, size_t size)
     }
     if(dst == FB_BOTTOM_VRAM_ADDR)
     {
+        assert(framebufferGeneration & 1u);
         if(restoring) assert(LCD_BOT_FILLCOLOR & LCD_FILLCOLOR_ENABLE);
         dst = vram;
     }
@@ -95,14 +100,22 @@ int main(void)
     LCD_BOT_BRIGHTNESS = 0x100A080;
     Draw_SetupFramebuffer();
     assert(Draw_IsFramebufferActive());
+    assert(!(Draw_GetFramebufferGeneration() & 1u));
+    u32 generation = Draw_GetFramebufferGeneration();
     for(u32 i = 0; i < FB_BOTTOM_SIZE; ++i) assert(backup[i] == (u8)i);
     assert(GPU_FB_BOTTOM_ADDR_1 == FB_BOTTOM_VRAM_PA && GPU_FB_BOTTOM_STRIDE == 480);
     flushCount = flushBytes = sleepMs = 0;
     Draw_DrawCharacter(10, 30, 0xFFFF, '>');
+    assert(Draw_GetFramebufferGeneration() & 1u);
     Draw_FlushFramebuffer();
+    assert(Draw_GetFramebufferGeneration() == generation + 2);
+    generation = Draw_GetFramebufferGeneration();
     assert(flushCount == 1 && flushBytes <= 7 * 480 && lastOffset <= 9 * 480);
     Draw_FlushFramebuffer();
     assert(flushCount == 1);
+    assert(Draw_GetFramebufferGeneration() == generation);
+    Draw_FillRect(10, 10, 0, 0, 0);
+    assert(Draw_GetFramebufferGeneration() == generation);
     memset(vram, 0x5A, sizeof(vram));
     checkRowCopy = true;
     Draw_DrawMenuRow(30, 0xC4FF, "本体情報", 0xC4FF, true, 'v');
@@ -121,6 +134,7 @@ int main(void)
     restoring = true;
     Draw_RestoreFramebufferAnimated(true);
     assert(!Draw_IsFramebufferActive());
+    assert(!(Draw_GetFramebufferGeneration() & 1u));
     restoring = false;
     for(u32 i = 0; i < FB_BOTTOM_SIZE; ++i) assert(vram[i] == (u8)i);
     assert(GPU_FB_BOTTOM_ADDR_1 == 0x18000000 && GPU_FB_BOTTOM_ADDR_2 == 0x18100000);
@@ -144,10 +158,11 @@ for version in ('Luma3DS_v13_4',):
     base = root / version / 'sysmodules/rosalina'
     source = (base / 'source/draw.c').read_text(encoding='utf-8')
     render = source[source.index('static u32 drawDirtyFirst'):source.index('u32 Draw_DrawFormattedString(')]
+    render = render.replace('static volatile u32 framebufferGeneration;', '')
     render = render.replace('(volatile u16 *)FB_BOTTOM_VRAM_ADDR', '(volatile u16 *)vram')
     fills = source[source.index('void Draw_FillFramebuffer('):source.index('Result Draw_AllocateFramebufferCache(') if newer else source.index('void Draw_SetupFramebuffer(')]
     fills = fills.replace('memset(FB_BOTTOM_VRAM_ADDR', 'memset(vram').replace('memset32(FB_BOTTOM_VRAM_ADDR, value, FB_BOTTOM_SIZE)', 'memset(vram, value, FB_BOTTOM_SIZE)').replace('(volatile u16 *)FB_BOTTOM_VRAM_ADDR', '(volatile u16 *)vram')
-    setup = source[source.index('u32 Draw_SetupFramebuffer(' if newer else 'void Draw_SetupFramebuffer('):source.index('u32 Draw_GetCurrentFramebufferAddress(')]
+    setup = source[source.index('static void Draw_EndFramebufferWrite(' if newer else 'void Draw_SetupFramebuffer('):source.index('u32 Draw_GetCurrentFramebufferAddress(')]
     setup = setup.replace('(u32)FB_BOTTOM_VRAM_ADDR', '(u32)(uintptr_t)FB_BOTTOM_VRAM_ADDR')
     target = generated / (version + '_display.c')
     target.write_text(prefix + render + fills + setup + main, encoding='utf-8', newline='\n')

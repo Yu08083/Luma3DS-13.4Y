@@ -206,7 +206,6 @@ static const LangEntry g_labels[] =
     { "Checking files...", "ファイルを確認中..." },
     { "Clipboard is empty.", "コピー・切り取りした項目がありません。" },
     { "Clipboard: %s%s   ", "クリップボード: %s%s   " },
-    { "Close Rosalina to stream video", "Rosalinaを閉じると映像を送信" },
     { "Close the menu to apply.", "メニューを閉じると適用します。" },
     { "Collecting data: %lu samples,\none every %lu s, 3 needed.\n\n", "データ収集中: %lu件\n%lu秒ごとに記録。3件必要です。\n\n" },
     { "Colors", "配色" },

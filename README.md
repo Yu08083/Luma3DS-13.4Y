@@ -14,7 +14,7 @@ New 3DSでは送信待ちの遅れを小さく補正し、圧縮処理の負荷�
 
 [リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.5Y.zip` を展開し、中身をSDカードのルートへ上書きします。`boot.firm` と `3ds/luma/9.1/boot.firm`、`3ds/luma/13.5/boot.firm` が入ります。同梱のv9.1から切り替えられるよう、v13.5Yを `3ds/luma/13.4/boot.firm` にも配置します。
 
-本家v13.5配布版の `boot.3dsx` と `config/ssl/cacert.pem` も同梱しています。
+[本家v13.5配布版](https://github.com/LumaTeam/Luma3DS/releases/tag/v13.5)の[Homebrew Menu](https://github.com/devkitPro/3ds-hbmenu)（`boot.3dsx`）と `config/ssl/cacert.pem` も同梱しています。
 
 - Rosalina: L + 十字下 + SELECTで開きます。`Language / 言語` で日本語・Englishを切り替え、Aで保存します。
 - Rosalinaの起動ボタン: STARTを押しながら起動し、`Rosalinaを開くボタン...` を選びます。Aでボタンを切り替え、STARTで保存、Bで取り消し、Xで標準へ戻します。
@@ -24,11 +24,11 @@ New 3DSでは送信待ちの遅れを小さく補正し、圧縮処理の負荷�
 - 背景テーマ: `SD:/3ds/luma/RosaliaTheme/` に画像を置き、メニューで選びます。PNG・無圧縮BMP・ベースラインJPEG、最大1024×1024・4MB。320×240を推奨します。
 - 3GX検査: 元のLuma3DS_New v1.3と同じ検知方式です。警告でAを押して許可した3GXはSDへ記録し、再起動後も保持します。対象領域の内容が変わった場合は再確認します。
 - FTP: Wi-Fiへ接続して開始し、接続待ちになったら表示IPのポート `5000` へ接続します。暗号化なし・パッシブモードを指定します。
-- Yu_ キャプチャ: Rosalinaの `Yu_ Capture... / Yu_ キャプチャ...` を開き、Aで開始します。同じネットワークの受信アプリに、表示された本体IPを入力して接続します。PCではSnickerstream・Chokistream、Android・iOSではYu_ キャプチャを使います。開始後はRosalinaを閉じてゲーム画面へ戻ります。Aで停止します。音声転送にも対応します。
+- Yu_ キャプチャ: Rosalinaの `Yu_ Capture... / Yu_ キャプチャ...` を開き、Aで開始します。同じネットワークの受信アプリに、表示された本体IPを入力して接続します。PCではSnickerstream・Chokistream、Android・iOSではYu_ キャプチャを使います。Rosalinaメニューも下画面として転送します。Aで停止します。音声転送にも対応します。
 
 Old 3DS / Old 2DSは低負荷の送信経路を使用します。画質と解像度は設定どおり保ち、撮影頻度とCPU使用時間を抑えます。Old本体の実機動作・到達FPSは未確認です。
 
-画面転送にはTCP `8000`・UDP `8001`、音声にはUDP `8002` を使います。Rosalina操作中・スリープ中・Wi-Fi切断中は一時停止します。
+画面転送にはTCP `8000`・UDP `8001`、音声にはUDP `8002` を使います。スリープ中・Wi-Fi切断中は一時停止します。
 
 3DS実機での起動・FTP接続・画面転送は未確認です。
 

@@ -68,6 +68,7 @@ static void Lang_Load(void){g_langLoaded=true;}
 static void LumaConfig_RequestSaveSettings(void){++saves;}
 void PluginLoader__MenuCallback(void);
 void PluginLoader__UpdateMenu(void);
+#define __dmb() ((void)0)
 #define SCREEN_BOT_WIDTH 320
 #define SCREEN_BOT_HEIGHT 240
 #define SPACING_X 6
