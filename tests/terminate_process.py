@@ -16,6 +16,7 @@ source = '\n'.join(line for line in source.splitlines() if not line.startswith('
 prefix = r'''
 #include <assert.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 typedef uint32_t u32;
 typedef int64_t s64;
