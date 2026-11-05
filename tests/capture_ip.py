@@ -140,26 +140,34 @@ int main(void)
  Menu submenu=rosalinaMenu;submenu.title="Other menu";
  MenuDrawState state={0};miniSocEnabled=true;cachedIp=0x6401A8C0;
  g_textColor=0xFFFF;g_accentColor=0xF81F;g_cursorColor=0xFFFF;
- draw(&rosalinaMenu,&state,false);CHECK(!has("192.168.1.100")&&cacheReads==0&&snapshotReads==0);
+ draw(&rosalinaMenu,&state,false);CHECK(has("192.168.1.100")&&cacheReads==1&&snapshotReads==0);geometry();
  captureRunning=true;draw(&rosalinaMenu,&state,false);
- CHECK(has("192.168.1.100")&&cacheReads==1&&snapshotReads==1);geometry();frame("waiting-viewer-menu-open");
+ CHECK(has("192.168.1.100")&&cacheReads==2&&snapshotReads==1);geometry();frame("waiting-viewer-menu-open");
  for(unsigned i=0;i<100;i++)draw(&rosalinaMenu,&state,false);
- CHECK(cacheReads==1&&snapshotReads==1&&commandCount==0);
+ CHECK(cacheReads==2&&snapshotReads==1&&commandCount==0);
  captureOffline=true;testNow=1000;draw(&rosalinaMenu,&state,true);CHECK(has("IP: --")&&!has("192.168.1.100"));frame("offline-stale-cache-hidden");
  captureOffline=false;captureSleeping=true;testNow=2000;draw(&rosalinaMenu,&state,true);CHECK(has("IP: --"));
  captureSleeping=false;cachedIp=0x04030201;testNow=3000;draw(&rosalinaMenu,&state,true);CHECK(has("1.2.3.4"));
  cachedIp=0;testNow=4000;draw(&rosalinaMenu,&state,true);CHECK(has("IP: --")&&!has("0.0.0.0"));
  cachedIp=UINT32_MAX;testNow=5000;draw(&rosalinaMenu,&state,true);CHECK(has("IP: --")&&!has("255.255.255.255"));
- captureRunning=false;unsigned reads=cacheReads;draw(&rosalinaMenu,&state,false);CHECK(!has("IP: --")&&cacheReads==reads&&captureAreaCleared());frame("stopped-cleared");
+ captureRunning=false;unsigned reads=cacheReads;draw(&rosalinaMenu,&state,false);CHECK(!has("IP: --")&&cacheReads==reads+1&&captureAreaCleared());frame("stopped-cleared");reads=cacheReads;
  isN3DS=false;captureRunning=true;state.valid=false;draw(&rosalinaMenu,&state,false);CHECK(has("IP: --")&&cacheReads==reads+1);geometry();frame("old3ds-visible");reads=cacheReads;
- isN3DS=true;cachedIp=0xFEFFFFFF;state.valid=false;draw(&submenu,&state,false);CHECK(!has("255.255.255.254")&&cacheReads==reads);
+ isN3DS=true;cachedIp=0xFEFFFFFF;state.valid=false;draw(&submenu,&state,false);CHECK(has("255.255.255.254")&&cacheReads==reads+1);
  for(unsigned language=0;language<2;language++)for(unsigned safe=0;safe<2;safe++)for(unsigned theme=0;theme<2;theme++){
   japanese=language;g_safeMode=safe;themeEnabled=theme;state.valid=false;
   menuIsRelease=false;menuVersionLoaded=true;batteryTemperature=255;batteryVoltage=5.25f;batteryPercentage=100;
   testNow+=1000;draw(&rosalinaMenu,&state,true);CHECK(has("255.255.255.254"));geometry();
-  CHECK(has("Luma3DS ver.y19-0000002a"));
+  CHECK(has("Luma3DS ver.y20-0000002a"));
   char name[64];snprintf(name,sizeof(name),"language%u-safe%u-theme%u",language,safe,theme);frame(name);
  }
+ miniSocEnabled=false;captureRunning=false;state.valid=false;testNow+=1000;
+ lumaMcuConfig.flags=MCUCFG_FLAG_TEMPERATURE_IN_FAHRENHEIT;batteryTemperature=25;
+ draw(&rosalinaMenu,&state,true);CHECK(has("11/05 12:34"));
+ CHECK(has("   77\xF8""F  5.25V  100.0%"));geometry();frame("date-fahrenheit");
+ lumaMcuConfig.flags=0;state.valid=false;testNow+=1000;
+ draw(&rosalinaMenu,&state,true);CHECK(has("   25\xF8""C  5.25V  100.0%"));geometry();
+ captureRunning=true;state.valid=false;testNow+=1000;
+ draw(&rosalinaMenu,&state,true);CHECK(has("255.255.255.254")&&!has("11/05 12:34"));geometry();
  char address[18];memset(address,0x7A,sizeof(address));
  CHECK(MenuCaptureIp_Format(address+1,true,true,true,false,false,0xFEFFFFFF)==MENU_CAPTURE_IP_READY);
  CHECK(address[0]==0x7A&&address[17]==0x7A&&strcmp(address+1,"255.255.255.254")==0);
@@ -173,7 +181,7 @@ int main(void)
 }
 '''
 target = args.output / 'capture_ip.c'
-target.write_text('#define NEWER 1\n#define FORK_DISPLAY_VERSION "v13.4Y"\n#define FORK_RELEASE_VERSION ' + release + '\n' + prefix + code + main, encoding='utf8')
+target.write_text('#define NEWER 1\n#define FORK_DISPLAY_VERSION "v13.5Y"\n#define FORK_RELEASE_VERSION ' + release + '\n' + prefix + code + main, encoding='utf8')
 binary = target.with_suffix('.exe' if os.name == 'nt' else '')
 command = [compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-variable',
            '-I' + str(base / 'include'), str(target), str(base / 'source/menu_capture_ip.c'), str(base / 'source/text.c'), '-o', str(binary)]
@@ -186,7 +194,7 @@ result['frames'] = values[:-1]
 result['source_sha256'] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                           for path in [base / 'source/menu.c', base / 'source/menu_capture_ip.c', base / 'include/menu_capture_ip.h', base / 'include/menu.h', Path(__file__)]}
 result['hardware_tested'] = False
-result['footer_fixture_boundary'] = 'Only the unchanged battery-footer sprintf is bounded to its actual 32-byte capacity in the host fixture; every call asserts no truncation. Production source, input conversions, format text and geometry checks are preserved.'
+result['footer_fixture_boundary'] = 'Only the battery-footer sprintf is bounded to its actual 32-byte capacity in the host fixture; every call asserts no truncation. Production source, input conversions, format text and geometry checks are preserved.'
 result['scope'] = 'Actual production menuDraw and capture formatter execute; existing status, cached IP, sleep, draw, MCU and SDK boundaries are fixtures. No SOC/AC service from rendering.'
 (args.output / 'report.json').write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
 print(json.dumps({key: result[key] for key in ('passed', 'checks', 'cache_reads', 'status_snapshots', 'soc_ac_calls')}))

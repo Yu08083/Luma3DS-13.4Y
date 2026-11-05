@@ -76,7 +76,7 @@ Menu rosalinaMenu = {
         { "File browser", METHOD, .method = &RosalinaMenu_FileBrowser },
         { "Save settings", METHOD, .method = &RosalinaMenu_SaveSettings },
         { "Return To HOME Menu", METHOD, .method = &RosalinaMenu_ReturnToHomeMenu },
-        { "Switch version (v9.1/v13.4Y)", METHOD, .method = &RosalinaMenu_ChainloadVersionToggle },
+        { "Switch version (v9.1/v13.5Y)", METHOD, .method = &RosalinaMenu_ChainloadVersionToggle },
         { "Power off / reboot", METHOD, .method = &RosalinaMenu_PowerOffOrReboot },
         { "Battery info", METHOD, .method = &RosalinaMenu_BatteryInfo },
         { "Memory dump", METHOD, .method = &RosalinaMenu_MemoryDump },
@@ -1143,7 +1143,7 @@ static u32 CheckSdCard_Firm(const char *path, u8 *header)
 void RosalinaMenu_CheckSdCard(void)
 {
     static const char *const paths[] = {
-        "/luma", "/luma/plugins", "/3ds/luma/9.1/boot.firm", "/3ds/luma/13.4/boot.firm", "/boot.firm"
+        "/luma", "/luma/plugins", "/3ds/luma/9.1/boot.firm", "/3ds/luma/13.5/boot.firm", "/boot.firm"
     };
     static const char *const marks[] = { "--", "OK", "NG" };
     static u8 headers[3][0x200];
@@ -1165,7 +1165,7 @@ void RosalinaMenu_CheckSdCard(void)
     if (status[4] == 1 && status[2] == 1 && memcmp(headers[2], headers[0], 0x200) == 0)
         active = " (v9.1)";
     else if (status[4] == 1 && status[3] == 1 && memcmp(headers[2], headers[1], 0x200) == 0)
-        active = " (v13.4Y)";
+        active = " (v13.5Y)";
 
     u64 freeBytes = SD_FreeBytes();
 

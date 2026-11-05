@@ -11,6 +11,8 @@
 
 #define THEME_DIRECTORY "/3ds/luma/RosaliaTheme"
 #define THEME_CONFIG "/luma/rosalina_theme.cfg"
+#define THEME_CONFIG_TEMP THEME_CONFIG ".tmp"
+#define THEME_CONFIG_BACKUP THEME_CONFIG ".bak"
 #define THEME_NAME_SIZE 128
 #define THEME_MAX_FILES 128
 #define THEME_ROWS 14
@@ -23,6 +25,8 @@ static u16 *themePixels;
 static char themeSelected[THEME_NAME_SIZE];
 static char themeNames[THEME_MAX_FILES][THEME_NAME_SIZE];
 static FS_DirectoryEntry themeEntries[4];
+
+typedef struct { IFile *file; const u8 *header; } ThemeFile;
 
 static bool themeNameValid(const char *name)
 {
@@ -80,7 +84,13 @@ static u32 themeList(void)
 
 static bool themeRead(void *context, u32 offset, void *buffer, u32 size)
 {
-    IFile *file = context;
+    ThemeFile *image = context;
+    if(offset <= 54 && size <= 54 - offset)
+    {
+        memcpy(buffer, image->header + offset, size);
+        return true;
+    }
+    IFile *file = image->file;
     file->pos = offset;
     u64 read = 0;
     return R_SUCCEEDED(IFile_Read(file, &read, buffer, size)) && read == size;
@@ -113,22 +123,29 @@ static u16 *themeLoadImage(const char *name)
     IFile file;
     if(R_FAILED(IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_UTF16, path), FS_OPEN_READ))) return NULL;
     u64 size;
+    u8 header[54];
+    u64 read = 0;
     u16 *candidate = NULL;
-    if(R_SUCCEEDED(IFile_GetSize(&file, &size)) && size >= 54 && size <= THEME_IMAGE_MAX_FILE_SIZE)
+    if(R_SUCCEEDED(IFile_GetSize(&file, &size)) && size >= sizeof(header) && size <= THEME_IMAGE_MAX_FILE_SIZE &&
+       R_SUCCEEDED(IFile_Read(&file, &read, header, sizeof(header))) && read == sizeof(header))
     {
+        u32 workSize = !memcmp(header, "\x89PNG\r\n\x1A\n", 8) ? THEME_IMAGE_WORK_SIZE : 0;
         u32 address = (u32)themePixels == THEME_ADDRESS_A ? THEME_ADDRESS_B : THEME_ADDRESS_A;
         u32 allocated;
-        if(R_SUCCEEDED(svcControlMemoryEx(&allocated, address, 0, THEME_PIXEL_SIZE, MEMOP_ALLOC | MEMOP_REGION_SYSTEM, MEMPERM_READWRITE, true)))
+        Result result = svcControlMemoryEx(&allocated, address, 0, THEME_PIXEL_SIZE + workSize, MEMOP_ALLOC | MEMOP_REGION_SYSTEM, MEMPERM_READWRITE, true);
+        if(R_FAILED(result) && !themePixels)
+        {
+            address = THEME_ADDRESS_B;
+            result = svcControlMemoryEx(&allocated, address, 0, THEME_PIXEL_SIZE + workSize, MEMOP_ALLOC | MEMOP_REGION_SYSTEM, MEMPERM_READWRITE, true);
+        }
+        if(R_SUCCEEDED(result))
         {
             candidate = (u16 *)address;
-            bool valid = false;
-            if(R_SUCCEEDED(svcControlMemoryEx(&allocated, address + THEME_PIXEL_SIZE, 0, THEME_IMAGE_WORK_SIZE, MEMOP_ALLOC | MEMOP_REGION_SYSTEM, MEMPERM_READWRITE, true)))
-            {
-                ThemeImageSource source = { .context = &file, .size = (u32)size, .read = themeRead, .cancelled = themeCancelled };
-                valid = ThemeImage_Decode(&source, candidate, (u8 *)candidate + THEME_PIXEL_SIZE, THEME_IMAGE_WORK_SIZE);
-                u32 unused;
-                svcControlMemory(&unused, address + THEME_PIXEL_SIZE, 0, THEME_IMAGE_WORK_SIZE, MEMOP_FREE, 0);
-            }
+            ThemeFile image = { &file, header };
+            ThemeImageSource source = { .context = &image, .size = (u32)size, .read = themeRead, .cancelled = themeCancelled };
+            bool valid = ThemeImage_Decode(&source, candidate, workSize ? (u8 *)candidate + THEME_PIXEL_SIZE : NULL, workSize);
+            u32 unused;
+            if(workSize) svcControlMemory(&unused, address + THEME_PIXEL_SIZE, 0, workSize, MEMOP_FREE, 0);
             if(!valid)
             {
                 themeFree(candidate, THEME_PIXEL_SIZE);
@@ -143,29 +160,57 @@ static u16 *themeLoadImage(const char *name)
 static bool themeSave(const char *name)
 {
     IFile file;
-    if(R_FAILED(IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, THEME_CONFIG), FS_OPEN_CREATE | FS_OPEN_WRITE))) return false;
+    if(R_FAILED(IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, THEME_CONFIG_TEMP), FS_OPEN_CREATE | FS_OPEN_WRITE))) return false;
     u32 length = strlen(name);
     u64 written = 0;
     Result result = IFile_Write(&file, &written, (void *)name, length, FS_WRITE_FLUSH);
     if(R_SUCCEEDED(result) && written == length) result = FSFILE_SetSize(file.handle, length);
     IFile_Close(&file);
-    return R_SUCCEEDED(result) && written == length;
+    if(R_FAILED(result) || written != length) return false;
+    bool original = R_SUCCEEDED(IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, THEME_CONFIG), FS_OPEN_READ));
+    if(original) IFile_Close(&file);
+    FS_Archive archive;
+    if(R_FAILED(FSUSER_OpenArchive(&archive, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, "")))) return false;
+    if(original)
+    {
+        FSUSER_DeleteFile(archive, fsMakePath(PATH_ASCII, THEME_CONFIG_BACKUP));
+        result = FSUSER_RenameFile(archive, fsMakePath(PATH_ASCII, THEME_CONFIG), archive, fsMakePath(PATH_ASCII, THEME_CONFIG_BACKUP));
+    }
+    if(R_SUCCEEDED(result))
+    {
+        result = FSUSER_RenameFile(archive, fsMakePath(PATH_ASCII, THEME_CONFIG_TEMP), archive, fsMakePath(PATH_ASCII, THEME_CONFIG));
+        if(R_FAILED(result) && original) FSUSER_RenameFile(archive, fsMakePath(PATH_ASCII, THEME_CONFIG_BACKUP), archive, fsMakePath(PATH_ASCII, THEME_CONFIG));
+    }
+    if(R_SUCCEEDED(result)) FSUSER_DeleteFile(archive, fsMakePath(PATH_ASCII, THEME_CONFIG_BACKUP));
+    FSUSER_CloseArchive(archive);
+    return R_SUCCEEDED(result);
 }
 
 void Theme_EnsureLoaded(void)
 {
     if(themeLoaded || g_safeMode) return;
-    themeLoaded = true;
     IFile file;
-    if(R_SUCCEEDED(IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, THEME_CONFIG), FS_OPEN_READ)))
+    Result opened = IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, THEME_CONFIG), FS_OPEN_READ);
+    if(R_FAILED(opened)) opened = IFile_Open(&file, ARCHIVE_SDMC, fsMakePath(PATH_EMPTY, ""), fsMakePath(PATH_ASCII, THEME_CONFIG_BACKUP), FS_OPEN_READ);
+    if(R_SUCCEEDED(opened))
     {
         u64 size = 0, read = 0;
-        if(R_SUCCEEDED(IFile_GetSize(&file, &size)) && size < THEME_NAME_SIZE && R_SUCCEEDED(IFile_Read(&file, &read, themeSelected, (u32)size)) && read == size)
+        bool valid = R_SUCCEEDED(IFile_GetSize(&file, &size)) && size < THEME_NAME_SIZE && R_SUCCEEDED(IFile_Read(&file, &read, themeSelected, (u32)size)) && read == size;
+        if(valid)
             themeSelected[size] = 0;
         else themeSelected[0] = 0;
         IFile_Close(&file);
-        if(themeNameValid(themeSelected)) themePixels = themeLoadImage(themeSelected);
-        else themeSelected[0] = 0;
+        if(!valid) return;
+        if(themeNameValid(themeSelected))
+        {
+            themePixels = themeLoadImage(themeSelected);
+            themeLoaded = themePixels != NULL;
+        }
+        else
+        {
+            themeSelected[0] = 0;
+            themeLoaded = true;
+        }
     }
 }
 
@@ -211,11 +256,13 @@ void RosalinaMenu_Theme(void)
     u32 count = themeList(), selected = 0, scroll = 0;
     for(u32 i = 0; i < count; ++i) if(!strcmp(themeSelected, themeNames[i])) selected = i;
     bool redraw = true, full = true;
+    u32 previous = selected, previousScroll = scroll;
     const char *error = NULL;
     while(!menuShouldExit)
     {
         if(selected < scroll) scroll = selected;
         if(selected >= scroll + THEME_ROWS) scroll = selected - THEME_ROWS + 1;
+        bool rowsChanged = full || scroll != previousScroll;
         if(redraw)
         {
             Draw_Lock();
@@ -229,6 +276,7 @@ void RosalinaMenu_Theme(void)
             {
                 for(u32 i = scroll; i < count && i < scroll + THEME_ROWS; ++i)
                 {
+                    if(!rowsChanged && i != selected && i != previous) continue;
                     char mark = 0;
                     if(i == scroll && scroll) mark = '^';
                     if(i == scroll + THEME_ROWS - 1 && i + 1 < count) mark = 'v';
@@ -247,6 +295,8 @@ void RosalinaMenu_Theme(void)
             Draw_Unlock();
             redraw = false;
             full = false;
+            previous = selected;
+            previousScroll = scroll;
         }
         u32 pressed = waitInputWithTimeout(100);
         if(pressed & KEY_B) break;
@@ -269,6 +319,7 @@ void RosalinaMenu_Theme(void)
             {
                 themeFree(themePixels, THEME_PIXEL_SIZE);
                 themePixels = pixels;
+                themeLoaded = true;
                 strcpy(themeSelected, themeNames[selected]);
                 AccentColor_Refresh();
                 return;

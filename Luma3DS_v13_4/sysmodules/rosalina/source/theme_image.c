@@ -59,6 +59,7 @@ typedef struct {
     const ThemeImageSource *source;
     uint16_t *pixels;
     uint32_t width, height, drawWidth, drawHeight, left, top, scaleX, scaleY;
+    uint32_t row, rowHeight, rowTop, rowBottom;
     uint32_t position, cacheStart, cacheSize;
     bool failed, done;
 } ThemeDecode;
@@ -105,6 +106,7 @@ static bool imageSetSize(ThemeDecode *image, uint32_t width, uint32_t height)
     if(!image->drawHeight) image->drawHeight = 1;
     image->left = (320 - image->drawWidth) / 2;
     image->top = (240 - image->drawHeight) / 2;
+    image->row = UINT32_MAX;
     return true;
 }
 
@@ -123,12 +125,18 @@ static void imagePixel(ThemeDecode *image, uint32_t x, uint32_t y, uint32_t widt
     if(image->failed || x >= image->width || y >= image->height) return;
     if(width > image->width - x) width = image->width - x;
     if(height > image->height - y) height = image->height - y;
+    if(image->row != y || image->rowHeight != height)
+    {
+        image->row = y;
+        image->rowHeight = height;
+        image->rowTop = imageScale(y * image->drawHeight, image->scaleY);
+        image->rowBottom = imageScale((y + height) * image->drawHeight, image->scaleY);
+    }
+    uint32_t top = image->rowTop, bottom = image->rowBottom;
+    if(top == bottom) return;
     uint32_t left = imageScale(x * image->drawWidth, image->scaleX);
     uint32_t right = imageScale((x + width) * image->drawWidth, image->scaleX);
     if(left == right) return;
-    uint32_t top = imageScale(y * image->drawHeight, image->scaleY);
-    uint32_t bottom = imageScale((y + height) * image->drawHeight, image->scaleY);
-    if(top == bottom) return;
     uint16_t color = (uint16_t)((imageChannel(r, alpha) >> 3) << 11 | (imageChannel(g, alpha) >> 2) << 5 | imageChannel(b, alpha) >> 3);
     for(uint32_t dx = left; dx < right; ++dx)
         for(uint32_t dy = top; dy < bottom; ++dy)
@@ -138,6 +146,12 @@ static void imagePixel(ThemeDecode *image, uint32_t x, uint32_t y, uint32_t widt
 static void imagePngDraw(pngle_t *png, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint8_t rgba[4])
 {
     ThemeDecode *image = pngle_get_user_data(png);
+    if((image->row != y || image->rowHeight != h) && imageCancelled(image))
+    {
+        image->failed = true;
+        pngle_abort(png);
+        return;
+    }
     imagePixel(image, x, y, w, h, rgba[0], rgba[1], rgba[2], rgba[3]);
 }
 
@@ -157,7 +171,7 @@ static bool imagePng(ThemeDecode *image, const uint8_t *header)
     pngle_set_done_callback(png, imagePngDone);
     uint32_t offset = 0, remain = 0;
     bool valid = true;
-    while(valid && !image->done)
+    while(valid && !image->done && !image->failed)
     {
         uint32_t amount = sizeof(imageInput) - remain;
         if(amount > image->source->size - offset) amount = image->source->size - offset;
@@ -170,7 +184,7 @@ static bool imagePng(ThemeDecode *image, const uint8_t *header)
         if(remain) memmove(imageInput, imageInput + fed, remain);
     }
     pngle_destroy(png);
-    return valid && image->done && !imageCancelled(image);
+    return valid && image->done && !image->failed && !imageCancelled(image);
 }
 
 static unsigned char imageJpegRead(unsigned char *buffer, unsigned char size, unsigned char *read, void *context)
@@ -198,8 +212,6 @@ static unsigned char imageJpegRead(unsigned char *buffer, unsigned char size, un
 
 static bool imageJpeg(ThemeDecode *image)
 {
-    uint8_t end[2];
-    if(!imageRead(image, image->source->size - 2, end, 2) || end[0] != 0xFF || end[1] != 0xD9) return false;
     pjpeg_image_info_t info;
     if(pjpeg_decode_init(&info, imageJpegRead, image, 0) || !imageSetSize(image, info.m_width, info.m_height)) return false;
     for(int my = 0; my < info.m_MCUSPerCol; ++my)
@@ -215,7 +227,7 @@ static bool imageJpeg(ThemeDecode *image)
                                info.m_comps == 1 ? r : info.m_pMCUBufG[offset], info.m_comps == 1 ? r : info.m_pMCUBufB[offset], 255);
                 }
         }
-    return !image->failed;
+    return !image->failed && !pjpeg_decode_finish();
 }
 
 static bool imageBmp(ThemeDecode *image, const uint8_t *header)
@@ -230,14 +242,19 @@ static bool imageBmp(ThemeDecode *image, const uint8_t *header)
     if(!imageSetSize(image, (uint32_t)width, (uint32_t)height)) return false;
     uint32_t stride = ((uint32_t)width * bits / 8 + 3) & ~3u;
     if(data > image->source->size || (uint32_t)height > (image->source->size - data) / stride) return false;
-    for(uint32_t y = 0; y < (uint32_t)height; ++y)
+    uint32_t previousRow = UINT32_MAX;
+    for(uint32_t dy = 0; dy < image->drawHeight; ++dy)
     {
+        uint32_t y = dy * (uint32_t)height / image->drawHeight;
         uint32_t row = topDown ? y : (uint32_t)height - y - 1;
-        if(!imageRead(image, data + row * stride, imageInput, stride)) return false;
-        for(uint32_t x = 0; x < (uint32_t)width; ++x)
+        if(imageCancelled(image)) return false;
+        if(row != previousRow && !imageRead(image, data + row * stride, imageInput, stride)) return false;
+        previousRow = row;
+        for(uint32_t dx = 0; dx < image->drawWidth; ++dx)
         {
+            uint32_t x = dx * (uint32_t)width / image->drawWidth;
             const uint8_t *p = imageInput + x * bits / 8;
-            imagePixel(image, x, y, 1, 1, p[2], p[1], p[0], 255);
+            image->pixels[(image->left + dx) * 240 + 239 - image->top - dy] = (uint16_t)((p[2] >> 3) << 11 | (p[1] >> 2) << 5 | p[0] >> 3);
         }
     }
     return true;
@@ -245,19 +262,23 @@ static bool imageBmp(ThemeDecode *image, const uint8_t *header)
 
 bool ThemeImage_Decode(const ThemeImageSource *source, uint16_t *pixels, void *work, size_t workSize)
 {
-    if(!source || !source->read || !pixels || !work || workSize < THEME_IMAGE_WORK_SIZE || ((uintptr_t)work & 7) || source->size < 54 || source->size > THEME_IMAGE_MAX_FILE_SIZE) return false;
-    imageArena = work;
-    imageArenaSize = THEME_IMAGE_WORK_SIZE;
-    ThemeBlock *first = (ThemeBlock *)work;
-    first->size = THEME_IMAGE_WORK_SIZE - sizeof(ThemeBlock);
-    first->used = 0;
+    if(!source || !source->read || !pixels || source->size < 54 || source->size > THEME_IMAGE_MAX_FILE_SIZE) return false;
     memset(pixels, 0, 320 * 240 * sizeof(uint16_t));
     ThemeDecode image = { .source = source, .pixels = pixels };
     uint8_t header[54];
     bool valid = false;
     if(imageRead(&image, 0, header, sizeof(header)))
     {
-        if(!memcmp(header, "\x89PNG\r\n\x1A\n", 8)) valid = imagePng(&image, header);
+        if(!memcmp(header, "\x89PNG\r\n\x1A\n", 8))
+        {
+            if(!work || workSize < THEME_IMAGE_WORK_SIZE || ((uintptr_t)work & 7)) return false;
+            imageArena = work;
+            imageArenaSize = THEME_IMAGE_WORK_SIZE;
+            ThemeBlock *first = (ThemeBlock *)work;
+            first->size = THEME_IMAGE_WORK_SIZE - sizeof(ThemeBlock);
+            first->used = 0;
+            valid = imagePng(&image, header);
+        }
         else if(header[0] == 0xFF && header[1] == 0xD8) valid = imageJpeg(&image);
         else if(header[0] == 'B' && header[1] == 'M') valid = imageBmp(&image, header);
     }

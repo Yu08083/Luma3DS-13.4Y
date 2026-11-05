@@ -79,6 +79,7 @@ typedef struct
 typedef unsigned char (*pjpeg_need_bytes_callback_t)(unsigned char* pBuf, unsigned char buf_size, unsigned char *pBytes_actually_read, void *pCallback_data);
 
 unsigned char pjpeg_decode_init(pjpeg_image_info_t *pInfo, pjpeg_need_bytes_callback_t pNeed_bytes_callback, void *pCallback_data, unsigned char reduce);
+unsigned char pjpeg_decode_finish(void);
 
 unsigned char pjpeg_decode_mcu(void);
 

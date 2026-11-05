@@ -136,12 +136,12 @@ int main(void)
 
     g_menuBgColor = 0;
     memset(testFramebuffer + GUARD, 0, SCREEN_BOT_WIDTH * SCREEN_BOT_HEIGHT * sizeof(u16));
-    Draw_DrawString(10, 10, 0xF800, "Rosalinaメニュー [v13.4Y]");
+    Draw_DrawString(10, 10, 0xF800, "Rosalinaメニュー [v13.5Y]");
     const char *items[] = { "スクリーンショット撮影", "画面フィルター...", "チート...", "プラグイン: [有効]", "New 3DS設定...", "プロセス一覧", "デバッガー設定...", "本体設定...", "その他の設定...", "配色...", "Language / 言語", "3gx / txtチェック", "SDカードを確認", "ファイルブラウザー", "設定を保存" };
     for (unsigned i = 0; i < sizeof(items) / sizeof(items[0]); ++i)
         Draw_DrawString(30, 30 + i * 11, 0xFFFF, items[i]);
     Draw_DrawCharacter(10, 30 + 9 * 11, 0xF800, '>');
-    Draw_DrawString(10, 220, 0xF800, "Luma3DS v13.4Y");
+    Draw_DrawString(10, 220, 0xF800, "Luma3DS v13.5Y");
     const u8 *glyph = Text_FindGlyph(0x65E5);
     assert(glyph != NULL);
     Draw_DrawString(270, 210, 0x07E0, "日");

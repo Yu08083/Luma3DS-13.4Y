@@ -202,6 +202,8 @@ static pjpeg_need_bytes_callback_t g_pNeedBytesCallback;
 static void *g_pCallback_data;
 static uint8 gCallbackStatus;
 static uint8 gReduce;
+static unsigned long gInputRead, gEndOffset, gScanStart;
+static uint8 gLastInput;
 
 static void fillInBuf(void)
 {
@@ -211,6 +213,13 @@ static void fillInBuf(void)
    gInBufLeft = 0;
 
    status = (*g_pNeedBytesCallback)(gInBuf + gInBufOfs, PJPG_MAX_IN_BUF_SIZE - gInBufOfs, &gInBufLeft, g_pCallback_data);
+   for (uint8 i = 0; i < gInBufLeft; ++i)
+   {
+      uint8 value = gInBuf[gInBufOfs + i];
+      if (gLastInput == 0xFF && value == M_EOI) gEndOffset = gInputRead + i + 1;
+      gLastInput = value;
+   }
+   gInputRead += gInBufLeft;
    if (status)
    {
 
@@ -2187,6 +2196,13 @@ unsigned char pjpeg_decode_mcu(void)
    return 0;
 }
 
+unsigned char pjpeg_decode_finish(void)
+{
+   if (gNumMCUSRemainingX || gNumMCUSRemainingY || gCallbackStatus || gEndOffset <= gScanStart)
+      return PJPG_STREAM_READ_ERROR;
+   return findEOI();
+}
+
 unsigned char pjpeg_decode_init(pjpeg_image_info_t *pInfo, pjpeg_need_bytes_callback_t pNeed_bytes_callback, void *pCallback_data, unsigned char reduce)
 {
    uint8 status;
@@ -2201,6 +2217,8 @@ unsigned char pjpeg_decode_init(pjpeg_image_info_t *pInfo, pjpeg_need_bytes_call
    g_pCallback_data = pCallback_data;
    gCallbackStatus = 0;
    gReduce = reduce;
+   gInputRead = gEndOffset = gScanStart = 0;
+   gLastInput = 0;
 
    status = init();
    if ((status) || (gCallbackStatus))
@@ -2217,6 +2235,7 @@ unsigned char pjpeg_decode_init(pjpeg_image_info_t *pInfo, pjpeg_need_bytes_call
    status = initScan();
    if ((status) || (gCallbackStatus))
       return gCallbackStatus ? gCallbackStatus : status;
+   gScanStart = gInputRead - gInBufLeft - 2;
 
    pInfo->m_width = gImageXSize; pInfo->m_height = gImageYSize; pInfo->m_comps = gCompsInFrame;
    pInfo->m_scanType = gScanType;

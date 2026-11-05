@@ -57,11 +57,11 @@ def main():
     assets.mkdir(exist_ok=True)
     icon = bytearray(48 * 48 * 3)
     draw_arrow(icon, 48, 48, 5, 8, 1, 20)
-    draw_text(icon, 48, 48, '13.4Y', 32, 1)
+    draw_text(icon, 48, 48, '13.5Y', 32, 1)
     png(assets / 'icon48x48.png', 48, 48, icon)
     banner = bytearray(256 * 128 * 3)
     draw_arrow(banner, 256, 128, 12, 18, 4, 46)
-    draw_text(banner, 256, 128, '13.4Y', 76, 4)
+    draw_text(banner, 256, 128, '13.5Y', 76, 4)
     png(assets / 'banner256x128.png', 256, 128, banner)
     with wave.open(str(assets / 'silent.wav'), 'wb') as audio:
         audio.setnchannels(1)

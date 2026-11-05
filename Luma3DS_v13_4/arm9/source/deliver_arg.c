@@ -131,6 +131,14 @@ bool isTwlToCtrLaunch(void)
     }
 }
 
+typedef struct HMSysMenuArg {
+    u32 kind;               // what HOME Menu should do (not a bitmask)
+    u32 sourceUid;          // source: unshifted unique ID, e.g. 0x98 = HOME Menu (EUR)
+    u64 targetTid;          // title to start
+    u32 targetMediaType;    // 0 NAND, 1 SD, 2 gamecard
+    s32 parental3dPolicy;   // 1 grant 3D exemption, 0 clear it, -1 keep as-is
+} HMSysMenuArg;
+
 static bool configureHomebrewAutobootCtr(u8 *deliverArg)
 {
     static const u8 appmemtypesO3ds[] = { 0, 2, 3, 4, 5 };
@@ -149,11 +157,23 @@ static bool configureHomebrewAutobootCtr(u8 *deliverArg)
 
     u32 category = (hbldrTid >> 32) & 0xFFFF;
     bool isSdApp = (category & 0x10) == 0 && category != 1;
-    *(u64 *)(deliverArg + 0x440) = hbldrTid;
-    *(u64 *)(deliverArg + 0x448) = isSdApp ? 1 : 0;
 
+    if (!configData.autobootCtrUseNs)
+    {
+        HMSysMenuArg *hm = (HMSysMenuArg *)(deliverArg + 0x500);
+        hm->kind = 3;
+        hm->sourceUid = 0x98;
+        hm->targetTid = hbldrTid;
+        hm->targetMediaType = hm->targetTid == 0 ? 2 : (isSdApp ? 1 : 0);
+        hm->parental3dPolicy = -1;
+    }
+    else
+    {
+        *(u64 *)(deliverArg + 0x440) = hbldrTid;
+        *(u64 *)(deliverArg + 0x448) = isSdApp ? 1 : 0;
 
-    *(u32 *)(deliverArg + 0x460) = (0 << 1) | (1 << 0);
+        *(u32 *)(deliverArg + 0x460) = (0 << 1) | (1 << 0);
+    }
 
 
 
@@ -238,11 +258,6 @@ bool configureHomebrewAutoboot(void)
     u32 mode = bootenv >> 1;
 
 
-
-
-
-
-
     if (mode != 0)
         return false;
     else if (bootenv == 1)
@@ -252,7 +267,12 @@ bool configureHomebrewAutoboot(void)
             if (deliverArg[i] != 0)
                 return false;
         }
-        for (u32 i = 0x440; i < 0x1000; i++)
+        for (u32 i = 0x440; i < 0x540; i++)
+        {
+            if (deliverArg[i] != 0)
+                return false;
+        }
+        for (u32 i = 0xD50; i < 0x1000; i++)
         {
             if (deliverArg[i] != 0)
                 return false;

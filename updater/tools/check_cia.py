@@ -149,7 +149,7 @@ def check_ncch(data, config):
                 start = 8 + language * 512
                 short = payload[start:start + 128].decode('utf-16le').split('\0')[0]
                 author = payload[start + 384:start + 512].decode('utf-16le').split('\0')[0]
-                require(short == 'Luma3DS 13.4Y Updater' and author == '@yu_', 'HOME title or author mismatch')
+                require(short == 'Luma3DS 13.5Y Updater' and author == '@yu_', 'HOME title or author mismatch')
         if name == 'banner':
             require(payload[:4] == b'CBMD' and size > 0x88, 'Invalid HOME banner')
     require(set(files) == {'.code', 'banner', 'icon', 'logo'}, 'Unexpected ExeFS entries')
@@ -206,9 +206,9 @@ def check_cia(path, rsf):
     require(part(sections['meta'], 0, 0x180) == part(exhdr, 0x40, 0x180), 'CIA metadata dependencies mismatch')
     require(le32(sections['meta'], 0x300) == le32(exhdr, 0x208) == 2, 'CIA metadata core version mismatch')
     require(digest(part(sections['meta'], 0x400, 0x36C0)).hex() == ncch['files']['icon']['sha256'], 'CIA metadata icon mismatch')
-    require(be16(tmd, body + 0x9C) == 1025, 'TMD version must be 1.0.1 (1025)')
+    require(be16(tmd, body + 0x9C) == 1026, 'TMD version must be 1.0.2 (1026)')
     return {'result': 'pass', 'bytes': len(data), 'sha256': digest(data).hex(), 'content_id': content_id,
-            'tmd_version': 1025, 'ncch': ncch, 'hardware_tested': False, 'rsa_signatures_verified': False}
+            'tmd_version': 1026, 'ncch': ncch, 'hardware_tested': False, 'rsa_signatures_verified': False}
 
 
 def main():

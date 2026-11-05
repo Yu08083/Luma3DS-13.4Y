@@ -43,6 +43,7 @@
 #include "bootdiag.h"
 #include "shell.h"
 #include "remote_play.h"
+#include "luma_config.h"
 
 #include "task_runner.h"
 #include "plugin.h"
@@ -56,19 +57,14 @@ void __libc_fini_array(void);
 
 void __ctru_exit(int rc) { (void)rc; }
 
-
 void __wrap_exit(int rc)
 {
     (void)rc;
 
     __libc_fini_array();
 
-
-
-
     svcExitProcess();
 }
-
 
 void initSystem(void)
 {
@@ -105,19 +101,11 @@ void initSystem(void)
         "Switch the hb. title to the current app." :
         "Switch the hb. title to " HBLDR_DEFAULT_3DSX_TITLE_NAME;
 
-
-
-
     __libc_init_array();
-
-
-
 
     u32 *tls = (u32 *)getThreadLocalStorage();
     memset(tls, 0, 0x80);
     tls[0] = 0x21545624;
-
-
 
     srvSetBlockingPolicy(true);
 }
@@ -164,9 +152,6 @@ static void handleShellNotification(u32 notificationId)
 
     if (notificationId == 0x213) {
 
-
-
-
         handleShellOpened();
         menuShouldExit = false;
     } else {
@@ -184,15 +169,11 @@ static void handlePreTermNotification(u32 notificationId)
     preTerminationRequested = true;
     RemotePlay_Stop();
 
-
     miniSocUnlockState(true);
-
 
     InputRedirection_Disable(100 * 1000 * 1000LL);
 
-
     debuggerDisable(100 * 1000 * 1000LL);
-
 
     if(isConnectionForced)
     {
@@ -207,7 +188,6 @@ static void handlePreTermNotification(u32 notificationId)
     if (isQtmInitialized)
         svcCloseHandle(*qtmGetSessionHandle());
 
-
     svcSignalEvent(preTerminationEvent);
     Draw_Unlock();
 }
@@ -218,7 +198,6 @@ static void handleNextApplicationDebuggedByForce(u32 notificationId)
 
     TaskRunner_RunTask(debuggerFetchAndSetNextApplicationDebugHandleTask, NULL, 0);
 }
-
 
 static const ServiceManagerServiceEntry services[] = {
     { "plg:ldr", 1, PluginLoader__HandleCommands, true },
@@ -242,7 +221,6 @@ static const ServiceManagerNotificationEntry notifications[] = {
     { 0x000, NULL },
 };
 
-
 int main(void)
 {
     if ((HID_PAD & 0x301) == 0x301) g_safeMode = true;
@@ -253,8 +231,9 @@ int main(void)
         svcBreak(USERBREAK_ASSERT);
     Draw_Init();
     Cheat_SeedRng(svcGetSystemTick());
+    LumaConfig_LoadMcuConfig();
     ScreenFiltersMenu_LoadConfig();
-    SysConfigMenu_LoadConfig();
+    MiscellaneousMenu_UpdateTemperatureUnitEntry();
 
     MyThread *menuThread = menuCreateThread();
     MyThread *taskRunnerThread = taskRunnerCreateThread();

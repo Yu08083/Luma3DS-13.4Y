@@ -3,9 +3,10 @@ import struct
 import sys
 from pathlib import Path
 from firm_modules import bundled_native_modules
+from stage_firmware import UPSTREAM_FILES
 
 root = Path(sys.argv[1])
-for path in (root / 'boot.firm', root / '3ds/luma/9.1/boot.firm', root / '3ds/luma/13.4/boot.firm'):
+for path in (root / 'boot.firm', root / '3ds/luma/9.1/boot.firm', root / '3ds/luma/13.4/boot.firm', root / '3ds/luma/13.5/boot.firm'):
     data = path.read_bytes()
     assert data[:4] == b'FIRM' and len(data) >= 0x200, str(path)
     regions = []
@@ -24,4 +25,6 @@ for path in (root / 'boot.firm', root / '3ds/luma/9.1/boot.firm', root / '3ds/lu
         budget=bundled_native_modules(data)
         print(path, 'bundled NCCH', hex(budget['total']), '/', hex(budget['limit']), 'known-working size gate OK')
     print(path, len(data), 'bytes, section hashes OK')
-assert (root / 'boot.firm').read_bytes() == (root / '3ds/luma/13.4/boot.firm').read_bytes()
+assert (root / 'boot.firm').read_bytes() == (root / '3ds/luma/13.5/boot.firm').read_bytes() == (root / '3ds/luma/13.4/boot.firm').read_bytes()
+for name, digest in UPSTREAM_FILES.items():
+    assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest, name

@@ -326,7 +326,7 @@ bool loadVersionFirm(const char *target)
 
 
 
-    if(memcmp(target, "13.4", 4) == 0) return true;
+    if(memcmp(target, "13.5", 4) == 0 || memcmp(target, "13.4", 4) == 0) return true;
     if(memcmp(target, "9.1", 3) != 0) return false;
 
     const char *path = OTHER_FIRM_ARGV_PATH;
@@ -887,17 +887,23 @@ u32 patchPrototypeNative(FirmwareSource nandType, bool doUnitinfoPatch)
         if (firmProtoVersion == 1200)
         {
             u8 b9[0x10000] = { 0 };
-            u32 hash[4] = { 0 };
+            u32 hash[32/4] = { 0 };
             sha(hash, (const void *)0x08080000, 0x10000, SHA_256_MODE);
 
             if (memcmp(hash, boot9Sha256, 32) != 0)
             {
-                u32 size = getFileSize("sdmc:/luma/backups/boot9.bin");
-                int readres = fileRead(b9, "sdmc:/luma/backups/boot9.bin", 0x10000);
-                sha(hash, b9, 0x10000, SHA_256_MODE);
+                char backupPath[0x40];
+                sprintf(backupPath, "backups/%08lX/boot9.bin", *(vu32 *)0x01FFB804);
 
-                if (size != 0x10000 || !readres || memcmp(hash, boot9Sha256, 32) != 0)
-                    error("No valid boot9 backup was found in memory or in\nsdmc:/luma/backups/boot9.bin. Please make sure\nyou have a valid backup to use this FIRM.");
+                bool found = fileRead(b9, backupPath, 0x10000) == 0x10000;
+                if (found)
+                {
+                    sha(hash, b9, 0x10000, SHA_256_MODE);
+                    found = memcmp(hash, boot9Sha256, 32) == 0;
+                }
+
+                if (!found)
+                    error("No valid boot9 backup was found in memory or in\nluma/%s. Please make\nsure you have a valid backup to use this FIRM.", backupPath);
             }
             else
             {

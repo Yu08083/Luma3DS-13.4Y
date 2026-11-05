@@ -48,7 +48,7 @@ def main():
         raw=data if isinstance(data,bytes) else data.encode('utf-8')
         out=c.create_string_buffer(64)
         return lib.Update_ParseRelease(raw,len(raw),out),out.value
-    tag='v13.4Y'
+    tag='v13.5Y'
     base={'schema':1,'version':tag,'asset':'boot.firm','size':1024,'sha256':hashlib.sha256(b'firmware').hexdigest()}
     def manifest(data):
         raw=data if isinstance(data,bytes) else data.encode('utf-8')
@@ -78,7 +78,15 @@ def main():
     for url in ('http://github.com/path','https://github.com.evil/path','https://user@github.com/path','https://github.com:443/path','https://evil/github.com/path','https://github.com/\\evil','https://github.com/path#fragment','https://github.com/path\r\nX: yes','https://github.com','https://GITHUB.COM/path'):
         expect(lib.Update_TrustedUrl(url.encode()),False)
     url=c.create_string_buffer(2048)
-    expect(lib.Update_AssetUrl(url,tag.encode(),b'boot.firm'));assert url.value==b'https://github.com/Yu08083/Luma3DS-13.4Y/releases/download/v13.4Y/boot.firm'
+    expect(lib.Update_AssetUrl(url,tag.encode(),b'boot.firm'));assert url.value==b'https://github.com/Yu08083/Luma3DS-13.4Y/releases/download/v13.5Y/boot.firm'
+    for version in ('v13.4Y','ver.y19','v13.5Y','ver.y20'):
+        ok,value=release(json.dumps({'tag_name':version,'draft':False,'prerelease':False}));expect(ok);assert value==version.encode()
+        update=dict(base,version=version)
+        raw=json.dumps(update).encode();parsed=Manifest()
+        expect(lib.Update_ParseManifest(raw,len(raw),version.encode(),c.byref(parsed)));assert parsed.version==version.encode()
+        for asset in ('boot.firm','update.json'):
+            expect(lib.Update_AssetUrl(url,version.encode(),asset.encode()))
+            assert url.value==('https://github.com/Yu08083/Luma3DS-13.4Y/releases/download/'+version+'/'+asset).encode()
     expect(lib.Update_AssetUrl(url,b'../x',b'boot.firm'),False)
     expect(lib.Update_AssetUrl(url,tag.encode(),b'bad.json'),False)
     h=bytearray(512);h[:4]=b'FIRM';struct.pack_into('<II',h,8,0x1FF80000,0x08001000)

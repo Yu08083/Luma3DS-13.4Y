@@ -79,7 +79,7 @@ else
 endif
 
 
-CFLAGS		:= -std=gnu11 $(COMMON_FLAGS) $(HARDERRORS)
+CFLAGS		:= -std=gnu23 $(COMMON_FLAGS) $(HARDERRORS)
 
 CXXFLAGS	:= -fno-rtti -fno-exceptions -std=gnu++17 $(COMMON_FLAGS)
 

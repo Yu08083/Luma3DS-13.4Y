@@ -13,7 +13,7 @@ OUT=ROOT/'build/updater-tests/arm'
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--compiler',default=str(ROOT.parent/'tools/bin/arm-none-eabi-gcc.exe'))
-    parser.add_argument('--ctru',default=str(ROOT/'.libctru/v2.7.0'))
+    parser.add_argument('--ctru',default=str(ROOT/'.libctru/v2.7.1'))
     args=parser.parse_args()
     OUT.mkdir(parents=True,exist_ok=True)
     compiler=Path(args.compiler).resolve()

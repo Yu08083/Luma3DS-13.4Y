@@ -35,12 +35,23 @@
 #include "ifile.h"
 #include "luminance.h"
 
+static Menu audioRoutingMenu = {
+    "Audio routing menu",
+    {
+        { "Auto (default)", METHOD, .method = &SysConfigMenu_SetAudioRoutingAuto },
+        { "Force headphones (reapply on HP ins./rem.)", METHOD, .method = &SysConfigMenu_SetAudioRoutingHeadphones },
+        { "Force speakers (reapply on HP ins./rem.)", METHOD, .method = &SysConfigMenu_SetAudioRoutingSpeakers },
+        {},
+    }
+};
+
 Menu sysconfigMenu = {
     "System configuration menu",
     {
-        { "Control volume", METHOD, .method=&SysConfigMenu_AdjustVolume},
+        { "Set volume slider override...", METHOD, .method=&SysConfigMenu_AdjustVolume},
         { "Control Wireless connection", METHOD, .method = &SysConfigMenu_ControlWifi },
-        { "Toggle LEDs", METHOD, .method = &SysConfigMenu_ToggleLEDs },
+        { "Set LED master brightness override...", METHOD, .method = &SysConfigMenu_SetLedMasterBrightnessOverride },
+        { "Set audio routing...", MENU, .menu = &audioRoutingMenu },
         { "Toggle Wireless", METHOD, .method = &SysConfigMenu_ToggleWireless },
         { "Toggle Power Button", METHOD, .method=&SysConfigMenu_TogglePowerButton },
         { "Toggle power to card slot", METHOD, .method=&SysConfigMenu_ToggleCardIfPower},
@@ -50,42 +61,189 @@ Menu sysconfigMenu = {
 };
 
 bool isConnectionForced = false;
-s8 currVolumeSliderOverride = -1;
 
-void SysConfigMenu_ToggleLEDs(void)
+static Result SysConfigMenu_ApplyLedMasterBrightnessOverride(void)
+{
+    u8 override = lumaMcuConfig.ledMasterBrightnessOverride;
+
+    u8 brightness = PctOverride_IsActive(override) ? (255 * PctOverride_GetPercentage(override) + 50) / 100 : 255;
+
+    Result res = mcuHwcInit();
+    if (R_SUCCEEDED(res))
+    {
+        res = MCUHWC_WriteRegister(0x28, &brightness, 1);
+        mcuHwcExit();
+    }
+
+    return res;
+}
+
+static void SysConfigMenu_SetLedMasterBrightnessOverrideValue(u8 override)
+{
+    if (override == lumaMcuConfig.ledMasterBrightnessOverride)
+        return;
+
+    lumaMcuConfig.ledMasterBrightnessOverride = override;
+
+    svcKernelSetState(0x10008, override);
+    SysConfigMenu_ApplyLedMasterBrightnessOverride();
+    LumaConfig_SaveMcuConfig();
+}
+
+#define SYSCONFIG_COL(x) (10 + (x) * SPACING_X)
+#define SYSCONFIG_ROW(y) (10 + (y) * SPACING_Y)
+
+static void SysConfigMenu_DrawOverrideStatus(u8 override)
+{
+    bool enabled = PctOverride_IsEnabled(override);
+    Draw_DrawString(SYSCONFIG_COL(0), SYSCONFIG_ROW(2), COLOR_WHITE, Lang_Translate("Override status:    "));
+    Draw_DrawString(SYSCONFIG_COL(20), SYSCONFIG_ROW(2), enabled ? COLOR_GREEN : COLOR_RED, enabled ? Lang_Translate("ENABLED ") : Lang_Translate("DISABLED"));
+    Draw_DrawFormattedString(SYSCONFIG_COL(28), SYSCONFIG_ROW(2), COLOR_WHITE, "  (%s)    ", PctOverride_HasValue(override) ? Lang_Translate("set") : Lang_Translate("not set"));
+}
+
+void SysConfigMenu_SetLedMasterBrightnessOverride(void)
 {
     Draw_Lock();
     Draw_ClearFramebuffer();
     Draw_FlushFramebuffer();
     Draw_Unlock();
 
+    bool mcuHwcOpened = R_SUCCEEDED(mcuHwcInit());
+
     do
     {
+        u8 override = lumaMcuConfig.ledMasterBrightnessOverride;
+
+        u8 curPct = PctOverride_HasValue(override) ? PctOverride_GetPercentage(override) : 100;
+
         Draw_Lock();
         Draw_DrawString(10, 10, COLOR_TITLE, Lang_Translate("System configuration menu"));
-        Draw_DrawString(10, 30, COLOR_WHITE, Lang_Translate("Press A to toggle, press B to go back."));
-        Draw_DrawString(10, 50, COLOR_RED, Lang_Translate("WARNING:"));
-        Draw_DrawString(10, 60, COLOR_WHITE, Lang_Translate("  * Entering sleep mode will reset the LED state!"));
-        Draw_DrawString(10, 70, COLOR_WHITE, Lang_Translate("  * LEDs cannot be toggled when the battery is low!"));
-
+        SysConfigMenu_DrawOverrideStatus(override);
+        Draw_DrawFormattedString(SYSCONFIG_COL(0), SYSCONFIG_ROW(3), COLOR_WHITE, Lang_Translate("Override value:     %u%%  "), curPct);
+        Draw_DrawString(SYSCONFIG_COL(0), SYSCONFIG_ROW(5), COLOR_WHITE,
+            Lang_Translate("Press A to toggle override.\n"
+            "Press Right/Left to +/- the value by 10 points.\n"
+            "Press Up/Down to +/- the value by 1 point.\n"
+            "Press X to clear or refresh the override.\n"
+            "Press B to go back.\n")
+        );
         Draw_FlushFramebuffer();
         Draw_Unlock();
 
-        u32 pressed = waitInputWithTimeout(1000);
+        u32 pressed = waitInputWithTimeout(15);
 
-        if(pressed & KEY_A)
+        if (pressed & KEY_B)
+            break;
+
+        override = lumaMcuConfig.ledMasterBrightnessOverride;
+        curPct = PctOverride_HasValue(override) ? PctOverride_GetPercentage(override) : 100;
+        s32 delta = 0;
+
+        if (pressed & KEY_A)
         {
-            mcuHwcInit();
-            u8 result;
-            MCUHWC_ReadRegister(0x28, &result, 1);
-            result = ~result;
-            MCUHWC_WriteRegister(0x28, &result, 1);
-            mcuHwcExit();
+            override = PctOverride_SetEnabled(override, !PctOverride_IsEnabled(override));
+
+            if (PctOverride_IsEnabled(override))
+                override = PctOverride_SetPercentage(override, curPct);
+
+            SysConfigMenu_SetLedMasterBrightnessOverrideValue(override);
         }
-        else if(pressed & KEY_B)
-            return;
+        else if (pressed & KEY_LEFT)
+            delta = -10;
+        else if (pressed & KEY_RIGHT)
+            delta = +10;
+        else if (pressed & KEY_DOWN)
+            delta = -1;
+        else if (pressed & KEY_UP)
+            delta = +1;
+        else if (pressed & KEY_X)
+        {
+
+            override = PctOverride_IsEnabled(override) ? PctOverride_SetPercentage(override, 100) : PCT_OVERRIDE_UNSET;
+            SysConfigMenu_SetLedMasterBrightnessOverrideValue(override);
+        }
+
+        if (delta != 0)
+            SysConfigMenu_SetLedMasterBrightnessOverrideValue(PctOverride_SetPercentage(override, (u8)CLAMP((s32)curPct + delta, 0, 100)));
     }
     while(!menuShouldExit);
+
+    if (mcuHwcOpened)
+        mcuHwcExit();
+}
+
+static Result SysConfigMenu_OpenCdcChkSession(void)
+{
+
+    Handle *cdcChkHandlePtr = cdcChkGetSessionHandle();
+    *cdcChkHandlePtr = 0;
+
+    Result res = srvGetServiceHandle(cdcChkHandlePtr, "cdc:CHK");
+
+    if (R_FAILED(res))
+        res = svcControlService(SERVICEOP_STEAL_CLIENT_SESSION, cdcChkHandlePtr, "cdc:CHK");
+
+    return res;
+}
+
+static void SysConfigMenu_CloseCdcChkSession(void)
+{
+    Handle *cdcChkHandlePtr = cdcChkGetSessionHandle();
+    svcCloseHandle(*cdcChkHandlePtr);
+    *cdcChkHandlePtr = 0;
+}
+
+Result SysConfigMenu_ApplyAudioRouting(void)
+{
+
+    bool headphones;
+    switch (LumaConfig_GetAudioRouting())
+    {
+        case AUDIO_ROUTING_SPEAKERS:
+            headphones = false;
+            break;
+        case AUDIO_ROUTING_HEADPHONES:
+            headphones = true;
+            break;
+        case AUDIO_ROUTING_AUTO:
+        default:
+
+            headphones = (*(vu8 *)((0x10147000 | (1u << 31)) + 0x10) & 1) != 0;
+            break;
+    }
+
+    Result res = SysConfigMenu_OpenCdcChkSession();
+    if (R_FAILED(res))
+        return res;
+
+    u8 reg;
+    res = CDCCHK_ReadRegisters2(100, 69, &reg, 1);
+    reg = (reg & ~0x30) | 0x20 | (headphones ? 0x10 : 0x00);
+    if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(100, 69, &reg, 1);
+
+    SysConfigMenu_CloseCdcChkSession();
+    return res;
+}
+
+static void SysConfigMenu_SetAudioRouting(AudioRouting routing)
+{
+    LumaConfig_SetMcuConfigFlags(MCUCFG_FLAGS_AUDIO_ROUTING_MASK, (u8)routing << MCUCFG_FLAGS_AUDIO_ROUTING_SHIFT);
+    SysConfigMenu_ApplyAudioRouting();
+}
+
+void SysConfigMenu_SetAudioRoutingAuto(void)
+{
+    SysConfigMenu_SetAudioRouting(AUDIO_ROUTING_AUTO);
+}
+
+void SysConfigMenu_SetAudioRoutingHeadphones(void)
+{
+    SysConfigMenu_SetAudioRouting(AUDIO_ROUTING_HEADPHONES);
+}
+
+void SysConfigMenu_SetAudioRoutingSpeakers(void)
+{
+    SysConfigMenu_SetAudioRouting(AUDIO_ROUTING_SPEAKERS);
 }
 
 void SysConfigMenu_ToggleWireless(void)
@@ -388,25 +546,59 @@ void SysConfigMenu_ToggleCardIfPower(void)
     while(!menuShouldExit);
 }
 
+static const u8 stereoBalanceAttenuationLut[100] = {
+     0,  0,  0,  1,  1,  1,  1,  1,  1,  2,
+     2,  2,  2,  2,  3,  3,  3,  3,  3,  4,
+     4,  4,  4,  5,  5,  5,  5,  5,  6,  6,
+     6,  6,  7,  7,  7,  7,  8,  8,  8,  9,
+     9,  9,  9, 10, 10, 10, 11, 11, 11, 12,
+    12, 12, 13, 13, 13, 14, 14, 15, 15, 15,
+    16, 16, 17, 17, 18, 18, 19, 19, 20, 20,
+    21, 22, 22, 23, 23, 24, 25, 26, 26, 27,
+    28, 29, 30, 31, 32, 33, 34, 35, 37, 38,
+    40, 42, 44, 46, 49, 52, 56, 61, 68, 80,
+};
+
+static s8 SysConfigMenu_ConvertSliderPercentageToVolume(u8 pct)
+{
+
+    u8 rawPinGain = 127 - (71 * pct + 50) / 100;
+
+    if (rawPinGain <= 90)
+        return 36 - rawPinGain;
+    else if (rawPinGain >= 91 && rawPinGain <= 126)
+        return 126 - 2 * rawPinGain;
+    else
+        return -128;
+}
+
+static s8 SysConfigMenu_AttenuateVolume(s8 volume, s8 balancePct)
+{
+
+    if (volume == -128 || balancePct >= 100)
+        return -128;
+
+    s32 v = (s32)volume - (s32)stereoBalanceAttenuationLut[balancePct];
+    return (s8)CLAMP(v, -127, 48);
+}
+
 static Result SysConfigMenu_ApplyVolumeOverride(void)
 {
 
-
-
-
-
-
-
-
+    u8 override = lumaMcuConfig.volumeSliderOverride;
+    s8 balancePct = lumaMcuConfig.volumeSliderOverrideStereoBalance;
+    bool active = PctOverride_IsActive(override);
 
     u8 i2s1Mux;
     u8 i2s2Mux;
-    Result res = cdcChkInit();
+    Result res = SysConfigMenu_OpenCdcChkSession();
+    if (R_FAILED(res))
+        return res;
 
-    if (R_SUCCEEDED(res)) res = CDCCHK_ReadRegisters2(0,  116, &i2s1Mux, 1);
+    res = CDCCHK_ReadRegisters2(0,  116, &i2s1Mux, 1);
     if (R_SUCCEEDED(res)) res = CDCCHK_ReadRegisters2(100, 49, &i2s2Mux, 1);
 
-    if (currVolumeSliderOverride >= 0)
+    if (active)
     {
         i2s1Mux &= ~0x80;
         i2s2Mux |=  0x20;
@@ -417,62 +609,62 @@ static Result SysConfigMenu_ApplyVolumeOverride(void)
         i2s2Mux &= ~0x20;
     }
 
-    s8 i2s1Volume;
+    s8 i2s1VolumeL;
+    s8 i2s1VolumeR;
     s8 i2s2Volume;
-    if (currVolumeSliderOverride >= 0)
+    if (active)
     {
+        s8 volume = SysConfigMenu_ConvertSliderPercentageToVolume(PctOverride_GetPercentage(override));
 
-
-
-
-
-
-
-
-
-
-
-
-        u8 rawPinGain = 127 - (71 * currVolumeSliderOverride + 50) / 100;
-        s8 volume;
-
-        if (rawPinGain <= 90)
-            volume = 36 - rawPinGain;
-        else if (rawPinGain >= 91 && rawPinGain <= 126)
-            volume = 126 - 2 * rawPinGain;
-        else
-            volume = -128;
-
-        i2s1Volume = volume;
+        i2s1VolumeL = balancePct > 0 ? SysConfigMenu_AttenuateVolume(volume, balancePct) : volume;
+        i2s1VolumeR = balancePct < 0 ? SysConfigMenu_AttenuateVolume(volume, -balancePct) : volume;
         i2s2Volume = volume;
     }
     else
     {
 
-
-        i2s1Volume =  -3;
-        i2s2Volume = -20;
+        i2s1VolumeL =  -3;
+        i2s1VolumeR =  -3;
+        i2s2Volume  = -20;
     }
 
-
-    if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(0, 65, &i2s1Volume, 1);
-    if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(0, 66, &i2s1Volume, 1);
+    if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(0, 65, &i2s1VolumeL, 1);
+    if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(0, 66, &i2s1VolumeR, 1);
     if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(100, 123, &i2s2Volume, 1);
 
     if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(0, 116, &i2s1Mux, 1);
     if (R_SUCCEEDED(res)) res = CDCCHK_WriteRegisters2(100, 49, &i2s2Mux, 1);
 
-    cdcChkExit();
+    SysConfigMenu_CloseCdcChkSession();
     return res;
 }
 
-void SysConfigMenu_LoadConfig(void)
+void SysConfigMenu_RestoreSettings(void)
 {
-    s64 out = -1;
-    svcGetSystemInfo(&out, 0x10000, 7);
-    currVolumeSliderOverride = (s8)out;
-    if (currVolumeSliderOverride >= 0)
-        SysConfigMenu_ApplyVolumeOverride();
+
+    if (isServiceUsable("cdc:CHK"))
+    {
+        if (PctOverride_IsActive(lumaMcuConfig.volumeSliderOverride))
+            SysConfigMenu_ApplyVolumeOverride();
+
+        if (LumaConfig_GetAudioRouting() != AUDIO_ROUTING_AUTO)
+        {
+
+            svcSleepThread(20 * 1000 * 1000LL);
+            SysConfigMenu_ApplyAudioRouting();
+        }
+    }
+
+    if (PctOverride_IsActive(lumaMcuConfig.ledMasterBrightnessOverride) && isServiceUsable("mcu::HWC"))
+        SysConfigMenu_ApplyLedMasterBrightnessOverride();
+}
+
+static u8 SysConfigMenu_SampleVolumeSliderPercentage(void)
+{
+
+    u8 sliderLevel = 63;
+    MCUHWC_ReadRegister(0x09, &sliderLevel, 1);
+    return (100 * sliderLevel + 31) / 63;
 }
 
 void SysConfigMenu_AdjustVolume(void)
@@ -482,74 +674,120 @@ void SysConfigMenu_AdjustVolume(void)
     Draw_FlushFramebuffer();
     Draw_Unlock();
 
-    s8 tempVolumeOverride = currVolumeSliderOverride;
-    static s8 backupVolumeOverride = -1;
-    if (backupVolumeOverride == -1)
-        backupVolumeOverride = tempVolumeOverride >= 0 ? tempVolumeOverride : 85;
+    u32 pos = 0;
+    Result res = 0;
+
+    bool mcuHwcOpened = R_SUCCEEDED(mcuHwcInit());
 
     do
     {
+        u8 override = lumaMcuConfig.volumeSliderOverride;
+        s8 balancePct = lumaMcuConfig.volumeSliderOverrideStereoBalance;
+        u8 curPct = PctOverride_HasValue(override) ? PctOverride_GetPercentage(override) : SysConfigMenu_SampleVolumeSliderPercentage();
+
+        char volumeStr[16];
+        char balanceStr[16];
+        sprintf(volumeStr, "%u%%", curPct);
+        if (balancePct < 0)
+            sprintf(balanceStr, "L %d%%", -balancePct);
+        else if (balancePct > 0)
+            sprintf(balanceStr, "R %d%%", balancePct);
+        else
+            strcpy(balanceStr, Lang_Translate("centered"));
+
         Draw_Lock();
         Draw_DrawString(10, 10, COLOR_TITLE, Lang_Translate("System configuration menu"));
-        u32 posY = Draw_DrawString(10, 30, COLOR_WHITE, Lang_Translate("Y: Toggle volume slider override.\nDPAD/CPAD: Adjust the volume level.\nA: Apply\nB: Go back\n\n"));
-        Draw_DrawString(10, posY, COLOR_WHITE, Lang_Translate("Current status:"));
-        posY = Draw_DrawString(100, posY, (tempVolumeOverride == -1) ? COLOR_RED : COLOR_GREEN, (tempVolumeOverride == -1) ? Lang_Translate(" DISABLED") : Lang_Translate(" ENABLED "));
-        if (tempVolumeOverride != -1) {
-            posY = Draw_DrawFormattedString(30, posY, COLOR_WHITE, Lang_Translate("\nValue: [%d%%]    "), tempVolumeOverride);
-        } else {
-            posY = Draw_DrawString(30, posY, COLOR_WHITE, "\n                 ");
-        }
-
+        SysConfigMenu_DrawOverrideStatus(override);
+        Draw_DrawFormattedString(SYSCONFIG_COL(0), SYSCONFIG_ROW(3), COLOR_WHITE, Lang_Translate("   Override value:  %-10s    "), volumeStr);
+        Draw_DrawFormattedString(SYSCONFIG_COL(0), SYSCONFIG_ROW(4), COLOR_WHITE, Lang_Translate("   Stereo balance:  %-10s    "), balanceStr);
+        for (u32 i = 0; i < 2; i++)
+            Draw_DrawString(SYSCONFIG_COL(0), SYSCONFIG_ROW(3 + i), COLOR_TITLE, i == pos ? ">" : " ");
+        Draw_DrawString(SYSCONFIG_COL(0), SYSCONFIG_ROW(6), COLOR_WHITE,
+            Lang_Translate("Press Up/Down to select value.\n"
+            "Press Right/Left to +/- by 1 point.\n"
+            "Hold R to adjust by 10 points.\n\n"
+            "Press A to toggle override.\n"
+            "Press X to clear or refresh volume.\n"
+            "Press Y to center stereo balance.\n"
+            "Press B to go back.\n")
+        );
+        if (R_FAILED(res))
+            Draw_DrawFormattedString(SYSCONFIG_COL(0), SYSCONFIG_ROW(15), COLOR_RED, Lang_Translate("Failed: 0x%08lX"), res);
+        else
+            Draw_DrawString(SYSCONFIG_COL(0), SYSCONFIG_ROW(15), COLOR_WHITE, "                  ");
         Draw_FlushFramebuffer();
         Draw_Unlock();
 
-        u32 pressed = waitInputWithTimeout(1000);
+        u32 kHeld = 0;
+        u32 pressed = waitInputWithTimeoutEx(&kHeld, 15);
+        bool apply = false;
 
-        Draw_Lock();
+        if (pressed & KEY_B)
+            break;
 
-        if(pressed & KEY_A)
+        override = lumaMcuConfig.volumeSliderOverride;
+        balancePct = lumaMcuConfig.volumeSliderOverrideStereoBalance;
+        if (pressed != 0)
+            curPct = PctOverride_HasValue(override) ? PctOverride_GetPercentage(override) : SysConfigMenu_SampleVolumeSliderPercentage();
+
+        if (pressed & KEY_A)
         {
-            currVolumeSliderOverride = tempVolumeOverride;
-            Result res = SysConfigMenu_ApplyVolumeOverride();
-            LumaConfig_SaveSettings();
-            if (R_SUCCEEDED(res))
-                Draw_DrawString(10, posY, COLOR_GREEN, Lang_Translate("\nSuccess!"));
-            else
-                Draw_DrawFormattedString(10, posY, COLOR_RED, Lang_Translate("\nFailed: 0x%08lX"), res);
+            override = PctOverride_SetEnabled(override, !PctOverride_IsEnabled(override));
+
+            if (PctOverride_IsEnabled(override))
+                override = PctOverride_SetPercentage(override, curPct);
+
+            apply = true;
         }
-        else if(pressed & KEY_B)
-            return;
-        else if(pressed & KEY_Y)
+        else if (pressed & KEY_UP)
+            pos = (2 + pos - 1) % 2;
+        else if (pressed & KEY_DOWN)
+            pos = (pos + 1) % 2;
+        else if (pressed & KEY_Y)
         {
-            Draw_DrawString(10, posY, COLOR_WHITE, "\n                 ");
-            if (tempVolumeOverride == -1) {
-                tempVolumeOverride = backupVolumeOverride;
-            } else {
-                backupVolumeOverride = tempVolumeOverride;
-                tempVolumeOverride = -1;
+            balancePct = 0;
+            apply = true;
+        }
+        else if (pressed & KEY_X)
+        {
+
+            override = PctOverride_IsEnabled(override) ? PctOverride_SetPercentage(override, SysConfigMenu_SampleVolumeSliderPercentage()) : PCT_OVERRIDE_UNSET;
+            apply = true;
+        }
+        else
+        {
+            s32 delta = 0;
+            s32 mult = (kHeld & KEY_R) ? 10 : 1;
+
+            if (pressed & KEY_LEFT)
+                delta = -mult;
+            else if (pressed & KEY_RIGHT)
+                delta = +mult;
+
+            if (delta != 0)
+            {
+                if (pos == 0)
+                    override = PctOverride_SetPercentage(override, (u8)CLAMP((s32)curPct + delta, 0, 100));
+                else
+                    balancePct = (s8)CLAMP((s32)balancePct + delta, -100, 100);
+
+                apply = true;
             }
         }
-        else if ((pressed & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT)) && tempVolumeOverride != -1)
+
+        if (apply)
         {
-            Draw_DrawString(10, posY, COLOR_WHITE, "\n                 ");
-            if (pressed & KEY_UP)
-                tempVolumeOverride++;
-            else if (pressed & KEY_DOWN)
-                tempVolumeOverride--;
-            else if (pressed & KEY_RIGHT)
-                tempVolumeOverride+=10;
-            else if (pressed & KEY_LEFT)
-                tempVolumeOverride-=10;
-
-            if (tempVolumeOverride < 0)
-                tempVolumeOverride = 0;
-            if (tempVolumeOverride > 100)
-                tempVolumeOverride = 100;
+            bool changed = override != lumaMcuConfig.volumeSliderOverride || balancePct != lumaMcuConfig.volumeSliderOverrideStereoBalance;
+            lumaMcuConfig.volumeSliderOverride = override;
+            lumaMcuConfig.volumeSliderOverrideStereoBalance = balancePct;
+            res = SysConfigMenu_ApplyVolumeOverride();
+            if (changed)
+                LumaConfig_SaveMcuConfig();
         }
-
-        Draw_FlushFramebuffer();
-        Draw_Unlock();
     } while(!menuShouldExit);
+
+    if (mcuHwcOpened)
+        mcuHwcExit();
 }
 
 void SysConfigMenu_ChangeScreenBrightness(void)
@@ -558,8 +796,6 @@ void SysConfigMenu_ChangeScreenBrightness(void)
     Draw_ClearFramebuffer();
     Draw_FlushFramebuffer();
     Draw_Unlock();
-
-
 
     u32 luminance = getCurrentLuminance(false);
     u32 minLum = getMinLuminancePreset();
@@ -605,8 +841,6 @@ void SysConfigMenu_ChangeScreenBrightness(void)
     svcKernelSetState(0x10000, 2);
     gspLcdInit();
 
-
-
     s32 lum = (s32)luminance;
 
     do
@@ -625,8 +859,6 @@ void SysConfigMenu_ChangeScreenBrightness(void)
 
             lum = lum < (s32)minLum ? (s32)minLum : lum;
             lum = lum > (s32)maxLum ? (s32)maxLum : lum;
-
-
 
             GSPLCD_SetBrightnessRaw(BIT(GSP_SCREEN_TOP) | BIT(GSP_SCREEN_BOTTOM), lum);
         }

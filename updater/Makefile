@@ -7,15 +7,15 @@ endif
 TOPDIR ?= $(CURDIR)
 include $(DEVKITARM)/3ds_rules
 
-TARGET := Luma3DS-13.4Y-Updater
+TARGET := Luma3DS-13.5Y-Updater
 BUILD := build
 CORE := $(abspath $(TOPDIR)/../Luma3DS_v13_4/sysmodules/rosalina)
 SOURCES := source $(CORE)/source $(CORE)/third_party/mbedtls/library
 INCLUDES := include $(CORE)/include $(CORE)/third_party/mbedtls/include
 LIBDIRS := $(CTRULIB)
 
-APP_TITLE := Luma3DS 13.4Y Updater
-APP_DESCRIPTION := Luma3DS 13.4Y Updater v1.0.1
+APP_TITLE := Luma3DS 13.5Y Updater
+APP_DESCRIPTION := Luma3DS 13.5Y Updater v1.0.2
 APP_AUTHOR := @yu_
 
 ARCH := -march=armv6k -mtune=mpcore -mfpu=vfp -mfloat-abi=hard -mtp=soft
@@ -63,7 +63,7 @@ $(OUTPUT).bnr: $(TOPDIR)/assets/banner256x128.png $(TOPDIR)/assets/silent.wav
 	@bannertool makebanner -i $(word 1,$^) -a $(word 2,$^) -o $@
 
 $(OUTPUT).cia: $(OUTPUT).elf $(OUTPUT).smdh $(OUTPUT).bnr $(TOPDIR)/metadata.rsf
-	@makerom -f cia -o $@ -elf $(OUTPUT).elf -rsf $(TOPDIR)/metadata.rsf -icon $(OUTPUT).smdh -banner $(OUTPUT).bnr -target t -exefslogo -ver 1025
+	@makerom -f cia -o $@ -elf $(OUTPUT).elf -rsf $(TOPDIR)/metadata.rsf -icon $(OUTPUT).smdh -banner $(OUTPUT).bnr -target t -exefslogo -ver 1026
 
 -include $(OFILES:.o=.d)
 

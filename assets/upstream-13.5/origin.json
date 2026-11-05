@@ -1,0 +1,11 @@
+{
+  "release": "https://github.com/LumaTeam/Luma3DS/releases/tag/v13.5",
+  "archive": "https://github.com/LumaTeam/Luma3DS/releases/download/v13.5/Luma3DSv13.5.zip",
+  "archive_sha256": "c2b701143beaf4efd30794839d0802b58ea3d06355580485485bfe6806a0e2a3",
+  "homebrew_source": "https://github.com/devkitPro/3ds-hbmenu",
+  "certificates_source": "https://curl.se/docs/caextract.html",
+  "files": {
+    "boot.3dsx": "ee0759707f87bf16d17c5dbe3332d1c5f57bc80b27ef7eaf375b20fb7ec7aefb",
+    "config/ssl/cacert.pem": "796f1389bfea13c0ed78f663b765baaff54a508e5483786bd6ece73c5e3e3cbe"
+  }
+}

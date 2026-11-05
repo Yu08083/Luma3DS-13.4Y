@@ -70,9 +70,9 @@ typedef struct { u32 type; const void *data; } Path;
 #define SPACING_Y 11
 #define COLOR_RED 1
 static bool menuShouldExit, terminationRequest, g_safeMode;
-static bool hasConfig, failWrite, failDecode, failAllocation;
-static char config[128];
-static u32 held, opens, decodes, clears, rows, allocated, freed, keyIndex, keyCount;
+static bool hasConfig, hasTemporary, hasBackup, failWrite, failDecode, failAllocation, failRead, pngImage, failFirstSlot, failRename;
+static char config[128], temporaryConfig[128], backupConfig[128];
+static u32 held, opens, decodes, clears, rows, allocated, freed, keyIndex, keyCount, imageReads, allocationBytes, allocatedBytes, freedBytes;
 static u32 keys[32];
 static u16 g_menuBgColor;
 static u32 g_accentColor, g_textColor, g_cursorColor;
@@ -103,6 +103,23 @@ static int utf16_to_utf8(u8 *dst, const u16 *src, u32 limit)
 }
 static Result FSUSER_OpenArchive(FS_Archive *archive, u32 type, Path path) { (void)type; (void)path; *archive = 1; return 0; }
 static Result FSUSER_CloseArchive(FS_Archive archive) { assert(archive == 1); return 0; }
+static char *configuration(u32 handle) { assert(handle >= 1 && handle <= 3); return handle == 1 ? config : handle == 2 ? temporaryConfig : backupConfig; }
+static u32 configHandle(const char *path)
+{
+    if(!strcmp(path, "/luma/rosalina_theme.cfg")) return 1;
+    if(!strcmp(path, "/luma/rosalina_theme.cfg.tmp")) return 2;
+    assert(!strcmp(path, "/luma/rosalina_theme.cfg.bak")); return 3;
+}
+static bool *configExists(u32 handle) { return handle == 1 ? &hasConfig : handle == 2 ? &hasTemporary : &hasBackup; }
+static Result FSUSER_DeleteFile(FS_Archive archive, Path path)
+{ assert(archive == 1 && path.type == PATH_ASCII); *configExists(configHandle(path.data)) = false; return 0; }
+static Result FSUSER_RenameFile(FS_Archive fromArchive, Path from, FS_Archive toArchive, Path to)
+{
+    assert(fromArchive == 1 && toArchive == 1 && from.type == PATH_ASCII && to.type == PATH_ASCII);
+    u32 source = configHandle(from.data), target = configHandle(to.data);
+    if((failRename && source == 2) || !*configExists(source) || *configExists(target)) return -1;
+    memmove(configuration(target), configuration(source), strlen(configuration(source)) + 1); *configExists(source) = false; *configExists(target) = true; return 0;
+}
 static Result FSUSER_CreateDirectory(FS_Archive archive, Path path, u32 attributes) { (void)attributes; assert(archive == 1 && path.type == PATH_ASCII); return 0; }
 static Result FSUSER_OpenDirectory(Handle *directory, FS_Archive archive, Path path) { (void)path; assert(archive == 1); *directory = 1; directoryOffset = 0; return 0; }
 static Result FSDIR_Read(Handle directory, u32 *read, u32 count, FS_DirectoryEntry *entries)
@@ -124,46 +141,53 @@ static Result IFile_Open(IFile *file, u32 archive, Path empty, Path path, u32 fl
     file->pos = 0;
     if(path.type == PATH_ASCII)
     {
-        assert(strcmp(path.data, "/luma/rosalina_theme.cfg") == 0);
-        file->handle = 1;
-        return flags == FS_OPEN_READ && !hasConfig ? -1 : 0;
+        file->handle = configHandle(path.data);
+        return flags == FS_OPEN_READ && !*configExists(file->handle) ? -1 : 0;
     }
     assert(path.type == PATH_UTF16);
     const u16 *name = path.data;
     assert(name[0] == '/');
-    file->handle = 2; ++opens;
+    char utf8[256]; int length = utf16_to_utf8((u8 *)utf8, name, sizeof(utf8) - 1);
+    assert(length > 0); utf8[length] = 0;
+    assert(!strcmp(utf8, "/3ds/luma/RosaliaTheme/a.JPG") || !strcmp(utf8, "/3ds/luma/RosaliaTheme/z.png") || !strcmp(utf8, "/3ds/luma/RosaliaTheme/日本語.bmp"));
+    file->handle = 4; ++opens;
     return 0;
 }
-static Result IFile_GetSize(IFile *file, u64 *size) { *size = file->handle == 1 ? strlen(config) : 100; return 0; }
+static Result IFile_GetSize(IFile *file, u64 *size) { *size = file->handle < 4 ? strlen(configuration(file->handle)) : 100; return 0; }
 static Result IFile_Read(IFile *file, u64 *read, void *buffer, u32 size)
 {
     *read = size;
-    if(file->handle == 1) memcpy(buffer, config, size);
-    else memset(buffer, 0, size);
+    if(failRead) { *read = 0; return -1; }
+    if(file->handle < 4) memcpy(buffer, configuration(file->handle), size);
+    else
+    {
+        ++imageReads; memset(buffer, 0, size);
+        if(pngImage && !file->pos && size >= 8) memcpy(buffer, "\x89PNG\r\n\x1A\n", 8);
+    }
     return 0;
 }
 static Result IFile_Write(IFile *file, u64 *written, void *buffer, u32 size, u32 flags)
 {
-    assert(file->handle == 1 && flags == FS_WRITE_FLUSH && size < sizeof(config));
-    if(failWrite) { *written = 0; return -1; }
-    memcpy(config, buffer, size); *written = size; hasConfig = true; return 0;
+    assert(file->handle == 2 && flags == FS_WRITE_FLUSH && size < sizeof(config));
+    if(failWrite) { memcpy(temporaryConfig, buffer, size / 2); *written = size / 2; return -1; }
+    memcpy(temporaryConfig, buffer, size); *written = size; hasTemporary = true; return 0;
 }
-static Result FSFILE_SetSize(u32 handle, u64 size) { assert(handle == 1 && size < sizeof(config)); config[size] = 0; return 0; }
+static Result FSFILE_SetSize(u32 handle, u64 size) { assert(handle == 2 && size < sizeof(config)); configuration(handle)[size] = 0; return 0; }
 static void IFile_Close(IFile *file) { (void)file; }
 static Result svcControlMemoryEx(u32 *result, uintptr_t address, u32 zero, u32 size, u32 operation, u32 permissions, bool unsafe)
 {
-    (void)zero; (void)permissions; assert(unsafe && operation == (MEMOP_ALLOC | MEMOP_REGION_SYSTEM) && (size == 0x26000 || size == 0x10000));
+    (void)zero; (void)permissions; assert(unsafe && operation == (MEMOP_ALLOC | MEMOP_REGION_SYSTEM) && (size == 0x26000 || size == 0x36000));
     assert(address == (uintptr_t)memoryA || address == (uintptr_t)memoryB || address == (uintptr_t)memoryA + 0x26000 || address == (uintptr_t)memoryB + 0x26000);
-    if(failAllocation) return -1;
-    ++allocated; *result = 1; return 0;
+    if(failAllocation || (failFirstSlot && address == (uintptr_t)memoryA)) return -1;
+    ++allocated; allocationBytes = size; allocatedBytes += size; *result = 1; return 0;
 }
 static Result svcControlMemory(u32 *result, uintptr_t address, u32 zero, u32 size, u32 operation, u32 permissions)
 {
-    (void)address; (void)zero; (void)permissions; assert(operation == MEMOP_FREE && size); ++freed; *result = 0; return 0;
+    (void)address; (void)zero; (void)permissions; assert(operation == MEMOP_FREE && size); ++freed; freedBytes += size; *result = 0; return 0;
 }
 bool ThemeImage_Decode(const ThemeImageSource *source, uint16_t *pixels, void *work, size_t size)
 {
-    (void)pixels; (void)work; assert(size == THEME_IMAGE_WORK_SIZE); ++decodes;
+    (void)pixels; assert(size == (pngImage ? THEME_IMAGE_WORK_SIZE : 0)); assert((work != NULL) == pngImage); ++decodes;
     u8 data[10]; assert(source->read(source->context, 0, data, sizeof(data)));
     return !failDecode && !source->cancelled(source->context);
 }
@@ -196,6 +220,7 @@ int main(void)
     assert(strcmp(config, "日本語.bmp") == 0 && themePixels == (u16 *)memoryA && decodes == 1);
     Theme_EnsureLoaded(); Theme_EnsureLoaded();
     assert(decodes == 1);
+    assert(allocationBytes == 0x26000 && imageReads == 1);
     failDecode = true;
     const u32 bad[] = { KEY_UP, KEY_A, KEY_B };
     choose(bad, 3);
@@ -206,6 +231,10 @@ int main(void)
     failWrite = false; failAllocation = true;
     choose(bad, 3);
     assert(themePixels == (u16 *)memoryA);
+    failAllocation = false; failRename = true;
+    choose(bad, 3);
+    assert(themePixels == (u16 *)memoryA && hasConfig && !hasBackup && !strcmp(config, "日本語.bmp"));
+    failRename = false;
     failAllocation = false;
     held = KEY_B;
     choose(bad, 3);
@@ -219,8 +248,9 @@ int main(void)
     g_safeMode = false;
     u32 oldClears = clears;
     const u32 navigate[] = { KEY_DOWN, KEY_UP, 0, 0, KEY_B };
+    u32 oldRows = rows, oldOpens = opens, oldDecodes = decodes;
     choose(navigate, 5);
-    assert(clears == oldClears + 1 && rows > 0);
+    assert(clears == oldClears + 1 && rows == oldRows + 7 && opens == oldOpens && decodes == oldDecodes);
     failWrite = true;
     assert(!Theme_Disable() && themePixels == (u16 *)memoryB);
     failWrite = false;
@@ -235,7 +265,19 @@ int main(void)
 #else
     (void)previousRefreshes;
 #endif
-    assert(allocated >= 3 && freed >= allocated);
+    assert(allocated >= 3 && freedBytes == allocatedBytes);
+    strcpy(config, "日本語.bmp"); hasConfig = true; themeLoaded = false; failRead = true;
+    Theme_EnsureLoaded(); assert(!themeLoaded && !themePixels);
+    failRead = false; failAllocation = true;
+    Theme_EnsureLoaded(); assert(!themeLoaded && !themePixels);
+    failAllocation = false; failFirstSlot = true; pngImage = true;
+    Theme_EnsureLoaded(); assert(themeLoaded && themePixels == (u16 *)memoryB && allocationBytes == 0x36000);
+    failFirstSlot = false; pngImage = false;
+    assert(Theme_Disable());
+    strcpy(backupConfig, "z.png"); hasBackup = true; hasConfig = false; themeLoaded = false;
+    Theme_EnsureLoaded(); assert(themeLoaded && themePixels == (u16 *)memoryA && !strcmp(themeSelected, "z.png"));
+    assert(Theme_Disable() && !hasBackup && hasConfig && !config[0]);
+    assert(freedBytes == allocatedBytes);
     puts("Theme UTF-8 file listing/sorting, selection, cached loading, safe mode, failed loads/saves, incremental rows and disable: OK");
     return 0;
 }

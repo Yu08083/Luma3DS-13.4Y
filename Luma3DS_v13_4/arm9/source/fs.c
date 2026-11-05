@@ -483,21 +483,23 @@ bool doLumaUpgradeProcess(void)
 
     remountCtrNandPartition(false);
 
+    bool noNandWrites = mountSdCardPartition(false) &&
+        f_stat("sdmc:/luma/.i_am_fine_with_outdated_luma_on_nand", NULL) == FR_OK;
 
 #ifndef BUILD_FOR_EXPLOIT_DEV
-    if (isSdMode && memcmp(launchedPathForFatfs, "sdmc:", 5) == 0)
+    if (!noNandWrites && isSdMode && memcmp(launchedPathForFatfs, "sdmc:", 5) == 0)
         ok = fileCopy(launchedPathForFatfs, "nand:/boot.firm", true, fileCopyBuffer, sizeof(fileCopyBuffer));
 #endif
 
-
-    ok2 = backupEssentialFiles();
+    if (!noNandWrites || isSdMode)
+        ok2 = backupEssentialFiles();
 
 
     fileDelete("sdmc:/luma/config.bin");
-    fileDelete("nand:/rw/luma/config.bin");
+    if (!noNandWrites) fileDelete("nand:/rw/luma/config.bin");
 
     createDir("sdmc:/luma/payloads");
-    createDir("nand:/rw/luma/payloads");
+    if (!noNandWrites) createDir("nand:/rw/luma/payloads");
 
     return ok && ok2;
 }

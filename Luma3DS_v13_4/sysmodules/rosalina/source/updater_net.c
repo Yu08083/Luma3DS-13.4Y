@@ -176,7 +176,7 @@ static int request(Connection *connection,const char *url,uint32_t limit,UpdateH
         svcSleepThread(10000000);
     }
     char headers[UPDATE_MAX_URL+256];
-    int bytes=snprintf(headers,sizeof(headers),"GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Luma3DS-13.4Y\r\nAccept: application/vnd.github+json\r\nAccept-Encoding: identity\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n",path,host);
+    int bytes=snprintf(headers,sizeof(headers),"GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Luma3DS-13.5Y\r\nAccept: application/vnd.github+json\r\nAccept-Encoding: identity\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n",path,host);
     if(bytes<0||(size_t)bytes>=sizeof(headers))return UPDATE_ERR_URL;
     size_t sent=0;
     while(sent<(size_t)bytes)

@@ -1,6 +1,6 @@
-# Luma3DS v13.4Y
+# Luma3DS v13.5Y
 
-Luma3DS_New v1.3 を改修した日本語・English対応版です。改修作者: `@yu_`。ver.y19。更新日: 2026-10-29。
+Luma3DS v13.5 に Luma3DS_New v1.3 由来の機能と日本語・English対応を組み込んだ版です。改修作者: `@yu_`。ver.y20。更新日: 2026-11-05。
 
 Yu_ キャプチャの開始中は、Rosalinaメニューの右上に本体IPを表示します。
 
@@ -12,7 +12,9 @@ New 3DSでは送信待ちの遅れを小さく補正し、圧縮処理の負荷�
 
 ## 導入
 
-[リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.4Y.zip` を展開し、中身をSDカードのルートへ上書きします。`boot.firm` と `3ds/luma/9.1/boot.firm`、`3ds/luma/13.4/boot.firm` が入ります。
+[リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.5Y.zip` を展開し、中身をSDカードのルートへ上書きします。`boot.firm` と `3ds/luma/9.1/boot.firm`、`3ds/luma/13.5/boot.firm` が入ります。同梱のv9.1から切り替えられるよう、v13.5Yを `3ds/luma/13.4/boot.firm` にも配置します。
+
+本家v13.5配布版の `boot.3dsx` と `config/ssl/cacert.pem` も同梱しています。
 
 - Rosalina: L + 十字下 + SELECTで開きます。`Language / 言語` で日本語・Englishを切り替え、Aで保存します。
 - Rosalinaの起動ボタン: STARTを押しながら起動し、`Rosalinaを開くボタン...` を選びます。Aでボタンを切り替え、STARTで保存、Bで取り消し、Xで標準へ戻します。
@@ -30,11 +32,11 @@ Old 3DS / Old 2DSは低負荷の送信経路を使用します。画質と解像
 
 3DS実機での起動・FTP接続・画面転送は未確認です。
 
-yu_ installerのLumaタブから更新できます。ver.y16以降では切り替え用の2ファイルも補完します。更新後は本体を再起動してください。
+v13.5Yへの更新はZIPの全ファイルをSDカードへ上書きし、本体を再起動してください。
 
 ## ビルド
 
-リリースの `Luma3DS-v13.4Y-source.zip`、またはこのリポジトリのソースを使用します。devkitProの3DS環境、git、make、Python 3、makerom、firmtoolを用意し、空白・日本語を含まないパスで実行します。
+リリースの `Luma3DS-v13.5Y-source.zip`、またはこのリポジトリのソースを使用します。devkitProの3DS環境、git、make、Python 3、makerom、firmtoolを用意し、空白・日本語を含まないパスで実行します。
 
 ```sh
 bash build.bat 1
@@ -42,11 +44,11 @@ bash build.bat 1
 
 Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生成されます。libctruは初回に固定バージョンを取得してビルドするため、ネット接続が必要です。
 
-使用する[libctru](https://github.com/devkitPro/libctru)はv2.7.0（`36fe1ada5b7ebe53ba4decda36d764a55f8fefb6`）です。その他のツールの固定版と検証手順は [.github/workflows/build.yml](.github/workflows/build.yml) にあります。
+使用する[libctru](https://github.com/devkitPro/libctru)はv2.7.1（`62b7c42c88b1ee837f513358409d2e5c8f9001a9`）です。その他のツールの固定版と検証手順は [.github/workflows/build.yml](.github/workflows/build.yml) にあります。
 
 makeromは[固定コミット](https://github.com/3DSGuy/Project_CTR/tree/e8f5f529c54ff9b22a2491a480ffa69206bf7b19)を取得し、`python3 tools/patch_makerom.py <Project_CTR>/makerom/src/code.c` を適用してからビルド・配置してください。CIも同じ手順で準備します。
 
-切り替え用v9.1の元ファイルは `assets/legacy/boot-9.1.firm`、対応ソースは `Luma3DS_v9_1/` です。通常のビルドではv13.4Yをビルドし、検証済みのv9.1を同梱します。
+切り替え用v9.1の元ファイルは `assets/legacy/boot-9.1.firm`、対応ソースは `Luma3DS_v9_1/` です。通常のビルドではv13.5Yをビルドし、検証済みのv9.1を同梱します。
 
 ## ライセンス
 

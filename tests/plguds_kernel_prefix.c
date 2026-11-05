@@ -51,6 +51,7 @@ static uint32_t observed_header, observed_word, observed_pointer;
 static char observed_service[9];
 static unsigned nbSection0Modules = 6;
 static bool hasStartedRosalinaNetworkFuncsOnce;
+static struct { u8 ledMasterBrightnessOverride; } cfwInfo = {255};
 static unsigned kernelVersion;
 static KRecursiveLock criticalLock;
 static KRecursiveLock *criticalSectionLock = &criticalLock;

@@ -20,6 +20,7 @@ void pngle_destroy(pngle_t *pngle);
 void pngle_reset(pngle_t *pngle);
 const char *pngle_error(pngle_t *pngle);
 int pngle_feed(pngle_t *pngle, const void *buf, size_t len);
+void pngle_abort(pngle_t *pngle);
 
 uint32_t pngle_get_width(pngle_t *pngle);
 uint32_t pngle_get_height(pngle_t *pngle);

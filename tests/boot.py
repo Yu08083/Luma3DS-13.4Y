@@ -179,7 +179,7 @@ for version in ('Luma3DS_v13_4',):
     data = '\n#include "font.h"\n'
     data += '\n#define TITLE_COLOR ' + ('0xFF9CC3' if newer else '0xFF9900')
     data += '\n#define TEXT_COLOR ' + ('0xFF9CC3' if newer else '0xFFFFFF')
-    data += '\n#define TITLE ' + json.dumps('Luma3DS v13.4Y 設定' if newer else 'Luma3DS v9.1 設定', ensure_ascii=False)
+    data += '\n#define TITLE ' + json.dumps('Luma3DS v13.5Y 設定' if newer else 'Luma3DS v9.1 設定', ensure_ascii=False)
     data += '\n#define OUTPUT "' + version + '_boot.rgb"\n'
     data += 'static const char *multi[] = { ' + ', '.join(json.dumps(s, ensure_ascii=False) for s in arrays['multiOptionsText']) + ' };\n'
     data += 'static const char *single[] = { ' + ', '.join(json.dumps(s, ensure_ascii=False) for s in arrays['singleOptionsText']) + ' };\n'

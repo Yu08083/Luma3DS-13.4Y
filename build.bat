@@ -1,7 +1,7 @@
 :<<"::BASH_BEGIN"
 @echo off
 setlocal EnableExtensions
-title Luma3DS v13.4Y build
+title Luma3DS v13.5Y build
 cd /d "%~dp0"
 
 set "RC=0"
@@ -30,7 +30,7 @@ set -Eeuo pipefail
 
 SEL="${1:-1}"
 case "$SEL" in
-  1|2|all|v13.4|v13.4Y) MODE=v13.4 ;;
+  1|2|all|v13.5|v13.5Y) MODE=v13.5 ;;
   4|clean) MODE=clean ;;
   *) echo "!! 1・2（ビルド）か4（clean）を指定してください（指定値: $SEL）" >&2; exit 1 ;;
 esac
@@ -53,12 +53,12 @@ DIST="$ROOT/3DS"
 LOG="$ROOT/build.log"
 : > "$LOG"
 
-V134_DIR="$ROOT/Luma3DS_v13_4"
-V134_CTRU=v2.7.0
+V135_DIR="$ROOT/Luma3DS_v13_4"
+V135_CTRU=v2.7.1
 
-V134_FIRM="$V134_DIR/boot.firm"
+V135_FIRM="$V135_DIR/boot.firm"
 
-if [ ! -f "$V134_DIR/Makefile" ]; then
+if [ ! -f "$V135_DIR/Makefile" ]; then
   echo "!! Luma3DS_v13_4/Makefile が見つかりません。build.bat と同じ場所に Luma3DS_v13_4 フォルダを置いてください。" >&2
   exit 1
 fi
@@ -68,8 +68,8 @@ trap 'echo; echo "!! ${STAGE}に失敗しました。詳細は build.log を確�
 
 if [ "$MODE" = clean ]; then
   STAGE="make clean"
-  printf 'v13.4Y を make clean 中...'
-  make -C "$V134_DIR" clean >> "$LOG" 2>&1
+  printf 'v13.5Y を make clean 中...'
+  make -C "$V135_DIR" clean >> "$LOG" 2>&1
   echo " 完了"
   trap - ERR
   exit 0
@@ -122,7 +122,7 @@ count_sources() {
 
 libctru_revision() {
   case "$1" in
-    v2.7.0) printf '%s\n' 36fe1ada5b7ebe53ba4decda36d764a55f8fefb6 ;;
+    v2.7.1) printf '%s\n' 62b7c42c88b1ee837f513358409d2e5c8f9001a9 ;;
     *) echo "!! 未対応のlibctruバージョンです: $1" >&2; return 1 ;;
   esac
 }
@@ -211,12 +211,12 @@ report_kext() {
   fi
 }
 
-build_version "v13.4Y" "$V134_DIR" "$V134_CTRU" all "$V134_FIRM"
-report_kext "$V134_DIR/k11_extension/k11_extension.elf" 0x70000000 "v13.4Y"
+build_version "v13.5Y" "$V135_DIR" "$V135_CTRU" all "$V135_FIRM"
+report_kext "$V135_DIR/k11_extension/k11_extension.elf" 0x70000000 "v13.5Y"
 
 STAGE="3DS フォルダの作成"
 rm -rf "$DIST"
-python3 "$ROOT/tools/stage_firmware.py" "$V134_FIRM" "$DIST"
+python3 "$ROOT/tools/stage_firmware.py" "$V135_FIRM" "$DIST"
 
 {
   echo

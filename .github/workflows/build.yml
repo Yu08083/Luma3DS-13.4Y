@@ -1,4 +1,4 @@
-name: Build Luma3DS v13.4Y
+name: Build Luma3DS v13.5Y
 
 on:
   push:
@@ -58,6 +58,9 @@ jobs:
       - run: python3 tests/plugin_empty_segments.py
       - run: python3 tests/streaming_audio.py
       - run: python3 tests/plguds_ipc.py
+      - run: python3 tests/terminate_process.py
+      - run: python3 tests/config_migration.py
+      - run: python3 tests/rosalina_135.py
       - run: python3 tools/update_font.py && git diff --exit-code -- '**/japanese_font.h' '**/japanese_lookup.h'
 
   build:
@@ -80,7 +83,7 @@ jobs:
           make -C /tmp/project-ctr/makerom deps -j2
           make -C /tmp/project-ctr/makerom -j2
           install /tmp/project-ctr/makerom/bin/makerom /usr/local/bin/makerom
-      - name: Build Luma3DS v13.4Y
+      - name: Build Luma3DS v13.5Y
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -90,18 +93,18 @@ jobs:
         run: |
           python3 tools/check_firm.py 3DS
           cd 3DS
-          sha256sum boot.firm 3ds/luma/9.1/boot.firm 3ds/luma/13.4/boot.firm > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
       - name: Firmware
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Luma3DS-v13.4Y
+          name: Luma3DS-v13.5Y
           path: 3DS/
           if-no-files-found: error
       - name: Firmware diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Luma3DS-v13.4Y-diagnostics
+          name: Luma3DS-v13.5Y-diagnostics
           path: |
             Luma3DS_v13_4/boot.firm
             Luma3DS_v13_4/sysmodules/rosalina/rosalina.elf

@@ -17,9 +17,9 @@ export COMMIT			:=	$(shell git rev-parse --short=8 HEAD)
 export IS_RELEASE		:=	0
 
 ifeq ($(strip $(REVISION)),)
-	export REVISION			:=	v13.4
+	export REVISION			:=	v13.5
 	export VERSION_MAJOR	:=	13
-	export VERSION_MINOR	:=	4
+	export VERSION_MINOR	:=	5
 	export VERSION_BUILD	:=	0
 endif
 
@@ -189,7 +189,7 @@ $(OUTPUT).elf	:	$(OFILES)
 $(OFILES_SRC)	: $(HFILES_BIN)
 
 memory.o strings.o:	CFLAGS +=	-O3
-patches.o config.o:	CFLAGS +=	-DCONFIG_TITLE="\"$(APP_TITLE) v13.4Y configuration\""\
+patches.o config.o:	CFLAGS +=	-DCONFIG_TITLE="\"$(APP_TITLE) v13.5Y configuration\""\
 								-DVERSION_MAJOR="$(VERSION_MAJOR)" -DVERSION_MINOR="$(VERSION_MINOR)"\
 								-DVERSION_BUILD="$(VERSION_BUILD)" -DISRELEASE="$(IS_RELEASE)" -DCOMMIT_HASH="0x$(COMMIT)"
 config.o ini.o:		CFLAGS +=	-DINI_HANDLER_LINENO=1 -DINI_STOP_ON_FIRST_ERROR=1

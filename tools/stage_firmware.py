@@ -5,6 +5,10 @@ import sys
 
 LEGACY_SIZE = 242176
 LEGACY_SHA256 = '76eb1f3b226cea65d643493a574b1427ad1e0da33f8fe9deca7a7d6caf025116'
+UPSTREAM_FILES = {
+    'boot.3dsx': 'ee0759707f87bf16d17c5dbe3332d1c5f57bc80b27ef7eaf375b20fb7ec7aefb',
+    'config/ssl/cacert.pem': '796f1389bfea13c0ed78f663b765baaff54a508e5483786bd6ece73c5e3e3cbe',
+}
 
 
 def check_firm(data):
@@ -27,15 +31,22 @@ def check_firm(data):
         raise ValueError('Empty FIRM')
 
 
-def stage(current, destination, legacy):
+def stage(current, destination, legacy, upstream=None):
     current_data = current.read_bytes()
     legacy_data = legacy.read_bytes()
     check_firm(current_data)
     check_firm(legacy_data)
     if len(legacy_data) != LEGACY_SIZE or hashlib.sha256(legacy_data).hexdigest() != LEGACY_SHA256:
         raise ValueError('Unexpected v9.1 FIRM')
-    files = {'boot.firm': current_data, '3ds/luma/13.4/boot.firm': current_data,
+    files = {'boot.firm': current_data, '3ds/luma/13.5/boot.firm': current_data,
+             '3ds/luma/13.4/boot.firm': current_data,
              '3ds/luma/9.1/boot.firm': legacy_data}
+    upstream = upstream or Path(__file__).resolve().parents[1] / 'assets/upstream-13.5'
+    for name, digest in UPSTREAM_FILES.items():
+        data = (upstream / name).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError('Unexpected upstream file: ' + name)
+        files[name] = data
     for name, data in files.items():
         path = destination / name
         path.parent.mkdir(parents=True, exist_ok=True)

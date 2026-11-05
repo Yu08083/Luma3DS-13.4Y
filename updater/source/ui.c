@@ -294,7 +294,7 @@ static bool changed(UpdaterUi *ui, const UpdaterUiSurface *surface, unsigned fir
 static void draw_top(const UpdaterUi *ui, const UpdaterAppView *view, const UpdaterUiSurface *surface)
 {
     memset(surface->pixels, 0, (size_t)surface->width * surface->height * 3u);
-    label(surface, 24, 24, UI_PURPLE, "Luma3DS 13.4Y Updater", 2);
+    label(surface, 24, 24, UI_PURPLE, "Luma3DS 13.5Y Updater", 2);
     if (view->version[0])
     {
         label(surface, 24, 88, UI_GRAY, local(ui, "Latest", "最新バージョン"), 2);

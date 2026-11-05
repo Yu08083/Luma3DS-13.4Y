@@ -1,4 +1,4 @@
-name: Build Luma3DS 13.4Y Updater
+name: Build Luma3DS 13.5Y Updater
 
 on:
   push:
@@ -42,7 +42,7 @@ jobs:
           apt-get install -y --no-install-recommends g++ python3-venv unzip libpng-dev libvorbis-dev
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git clone https://github.com/devkitPro/libctru.git /tmp/updater-libctru
-          git -C /tmp/updater-libctru checkout 36fe1ada5b7ebe53ba4decda36d764a55f8fefb6
+          git -C /tmp/updater-libctru checkout 62b7c42c88b1ee837f513358409d2e5c8f9001a9
           sed -i 's/-Werror//g' /tmp/updater-libctru/libctru/Makefile
           make -C /tmp/updater-libctru/libctru -j2
           echo 'CTRULIB=/tmp/updater-libctru/libctru' >> "$GITHUB_ENV"
@@ -61,11 +61,11 @@ jobs:
         shell: bash
         run: |
           make -C updater -j2
-          python3 updater/tools/check_cia.py updater/Luma3DS-13.4Y-Updater.cia --report updater/cia-proof.json
+          python3 updater/tools/check_cia.py updater/Luma3DS-13.5Y-Updater.cia --report updater/cia-proof.json
       - name: Updater
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Luma3DS-13.4Y-Updater
+          name: Luma3DS-13.5Y-Updater
           path: |
             updater/*.cia
             updater/*.3dsx

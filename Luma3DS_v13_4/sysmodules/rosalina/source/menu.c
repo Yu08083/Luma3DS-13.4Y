@@ -48,8 +48,6 @@
 #include "sleep.h"
 #include "menu_capture_ip.h"
 
-
-
 u32 menuCombo = 0;
 bool isHidInitialized = false;
 bool isQtmInitialized = false;
@@ -60,8 +58,6 @@ bool mcuInfoTableRead = false;
 const char *topScreenType = NULL;
 const char *bottomScreenType = NULL;
 bool areScreenTypesInitialized = false;
-
-
 
 bool hidShouldUseIrrst(void)
 {
@@ -211,30 +207,24 @@ static Result menuUpdateMcuInfo(void)
     if (res != 0)
         return res;
 
-
     res = MCUHWC_ReadRegister(0xA, data, 4);
 
     if (R_SUCCEEDED(res))
     {
         batteryTemperature = data[0];
 
-
-
         batteryPercentage = data[1] + data[2] / 256.0f;
         batteryPercentage = (u32)((batteryPercentage + 0.05f) * 10.0f) / 10.0f;
-
 
         batteryVoltage = 0.02f * data[3];
         batteryVoltage = (u32)((batteryVoltage + 0.005f) * 100.0f) / 100.0f;
     }
-
 
     if (mcuFwVersion == 0)
     {
         u8 minor = 0, major = 0;
         MCUHWC_GetFwVerHigh(&major);
         MCUHWC_GetFwVerLow(&minor);
-
 
         mcuFwVersion = SYSTEM_VERSION(major - 0x10, minor, 0);
     }
@@ -294,7 +284,6 @@ static void menuInitializeQtm(void)
 {
     if (isQtmInitialized)
         return;
-
 
     Handle qtmHandle = 0;
     for (int i = 0; i < 30 && !qtmIsInitialized(); i++)
@@ -497,7 +486,7 @@ static void menuReadVersion(void)
     menuCommitHash = (u32)value;
     svcGetSystemInfo(&value, 0x10000, 0x200);
     menuIsRelease = (bool)value;
-    if (GET_VERSION_MAJOR(version) == 13 && GET_VERSION_MINOR(version) == 4 && GET_VERSION_REVISION(version) == 0)
+    if (GET_VERSION_MAJOR(version) == 13 && GET_VERSION_MINOR(version) == 5 && GET_VERSION_REVISION(version) == 0)
         strcpy(menuVersionString, FORK_RELEASE_VERSION);
     else if (GET_VERSION_REVISION(version) == 0)
         sprintf(menuVersionString, "v%lu.%lu", (unsigned long)GET_VERSION_MAJOR(version), (unsigned long)GET_VERSION_MINOR(version));
@@ -610,15 +599,27 @@ static void menuDraw(Menu *menu, u32 selected, bool refreshStatus, MenuDrawState
     if (full || statusChanged || captureChanged)
     {
         Draw_FillRect(219, 10, 101, 10, g_menuBgColor);
+        char topRightStr[CALENDAR_TIME_STR_SIZE];
         if (captureRunning)
         {
             RemotePlayStatus capture;
             RemotePlay_GetStatus(&capture);
-            char ipBuffer[16];
-            MenuCaptureIp_Format(ipBuffer, true, true, true, capture.noNetwork,
+            MenuCaptureIp_Format(topRightStr, true, true, true, capture.noNetwork,
                 Sleep__IsSleeping(), miniSocGetCachedHostId());
-            Draw_DrawString(SCREEN_BOT_WIDTH - 10 - Draw_MeasureString(ipBuffer), 10, g_textColor, ipBuffer);
         }
+        else if (miniSocEnabled)
+        {
+            u32 ip = miniSocGetCachedHostId();
+            u8 *addr = (u8 *)&ip;
+            sprintf(topRightStr, "%hhu.%hhu.%hhu.%hhu", addr[0], addr[1], addr[2], addr[3]);
+        }
+        else
+        {
+            CalendarTime time;
+            calendarTimeFromMsSince1900(&time, osGetTime());
+            sprintf(topRightStr, "%02d/%02d %02d:%02d", time.month, time.day, time.hour, time.minute);
+        }
+        Draw_DrawString(SCREEN_BOT_WIDTH - 10 - Draw_MeasureString(topRightStr), 10, g_textColor, topRightStr);
         Draw_FillRect(0, SCREEN_BOT_HEIGHT - 20, SCREEN_BOT_WIDTH, SPACING_Y, g_menuBgColor);
         if (menuMcuResult == 0)
         {
@@ -627,7 +628,9 @@ static void menuDraw(Menu *menu, u32 selected, bool refreshStatus, MenuDrawState
             u32 voltageFrac = (u32)(batteryVoltage * 100.0f) % 100u;
             u32 percentageInt = (u32)batteryPercentage;
             u32 percentageFrac = (u32)(batteryPercentage * 10.0f) % 10u;
-            int n = sprintf(text, "   %02hhu\xF8""C  %lu.%02luV  %lu.%lu%%", batteryTemperature,
+            bool fahrenheit = (lumaMcuConfig.flags & MCUCFG_FLAG_TEMPERATURE_IN_FAHRENHEIT) != 0;
+            int temperature = fahrenheit ? (9 * batteryTemperature + 2) / 5 + 32 : batteryTemperature;
+            int n = sprintf(text, fahrenheit ? "  %3d\xF8""F  %lu.%02luV  %lu.%lu%%" : "   %02d\xF8""C  %lu.%02luV  %lu.%lu%%", temperature,
                             (unsigned long)voltageInt, (unsigned long)voltageFrac,
                             (unsigned long)percentageInt, (unsigned long)percentageFrac);
             Draw_DrawString(SCREEN_BOT_WIDTH - 10 - SPACING_X * n, SCREEN_BOT_HEIGHT - 20, COLOR_WHITE, text);

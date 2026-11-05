@@ -24,7 +24,7 @@ def main():
     support=OUT/'support.c'
     support.write_bytes(b'#include <3ds.h>\n#include <stddef.h>\n#include <errno.h>\nResult __wrap_svcSendSyncRequest(Handle h){(void)h;return 0;}\nvoid *memcpy(void *d,const void *s,size_t n){unsigned char *o=d;const unsigned char *i=s;while(n--)*o++=*i++;return d;}\nvoid *memset(void *d,int v,size_t n){unsigned char *o=d;while(n--)*o++=(unsigned char)v;return d;}\nint test_inprogress(void){return EINPROGRESS;}\n')
     target=OUT/'ipc.elf'
-    args=[str(compiler),'-std=gnu11','-Os','-Wall','-Wextra','-Werror','-ffreestanding','-fno-builtin','-ffunction-sections','-fdata-sections','-nostdlib','-march=armv6k','-mfpu=vfp','-mfloat-abi=hard','-mtp=soft','-D__3DS__','-I'+str(ROS/'include'),'-I'+str(ROOT/'.libctru/v2.7.0/include'),str(ROS/'source/minisoc.c'),str(support),'-Wl,--wrap=svcSendSyncRequest,--gc-sections,-e,socResolveIPv4,-u,socSetNonBlocking,-u,socConnectAsync,-u,test_inprogress,-Ttext,0x07000000',str(ROOT/'.libctru/v2.7.0/lib/libctru.a'),'-lgcc','-o',str(target)]
+    args=[str(compiler),'-std=gnu11','-Os','-Wall','-Wextra','-Werror','-ffreestanding','-fno-builtin','-ffunction-sections','-fdata-sections','-nostdlib','-march=armv6k','-mfpu=vfp','-mfloat-abi=hard','-mtp=soft','-D__3DS__','-I'+str(ROS/'include'),'-I'+str(ROOT/'.libctru/v2.7.1/include'),str(ROS/'source/minisoc.c'),str(support),'-Wl,--wrap=svcSendSyncRequest,--gc-sections,-e,socResolveIPv4,-u,socSetNonBlocking,-u,socConnectAsync,-u,test_inprogress,-Ttext,0x07000000',str(ROOT/'.libctru/v2.7.1/lib/libctru.a'),'-lgcc','-o',str(target)]
     result=subprocess.run(args,capture_output=True,text=True)
     assert result.returncode==0,result.stdout+result.stderr
     elf=ELFFile(io.BytesIO(target.read_bytes()))

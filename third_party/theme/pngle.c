@@ -84,6 +84,7 @@ struct _pngle_t {
 
 	uint8_t *next_out;
 	size_t  avail_out;
+	int data_done;
 	tinfl_decompressor inflator;
 	uint8_t lz_buf[TINFL_LZ_DICT_SIZE];
 };
@@ -147,6 +148,7 @@ void pngle_reset(pngle_t *pngle)
 
 	pngle->channels = 0;
 	pngle->next_out = NULL;
+	pngle->data_done = 0;
 
 	memset(&pngle->hdr, 0, sizeof(pngle->hdr));
 	pngle->n_palettes = 0;
@@ -321,6 +323,7 @@ static int pngle_draw_pixels(pngle_t *pngle, size_t scanline_ringbuf_xidx)
 				, MIN(interlace_div_y[pngle->interlace_pass] - interlace_off_y[pngle->interlace_pass], pngle->hdr.height - pngle->drawing_y)
 				, rgba
 			);
+			if (pngle->state == PNGLE_STATE_ERROR) return -1;
 		}
 	}
 
@@ -496,6 +499,7 @@ static int pngle_handle_chunk(pngle_t *pngle, const uint8_t *buf, size_t len)
 
 		if (pngle->hdr.compression != 0) return PNGLE_ERROR("Unsupported compression type in IHDR");
 		if (pngle->hdr.filter      != 0) return PNGLE_ERROR("Unsupported filter type in IHDR");
+		if (pngle->hdr.interlace   >  1) return PNGLE_ERROR("Unsupported interlace type in IHDR");
 
 		if (set_interlace_pass(pngle, pngle->hdr.interlace ? 1 : 0) < 0) return -1;
 
@@ -520,6 +524,7 @@ static int pngle_handle_chunk(pngle_t *pngle, const uint8_t *buf, size_t len)
 
 			pngle->next_out   += out_bytes;
 			pngle->avail_out  -= out_bytes;
+			if (status == TINFL_STATUS_DONE) pngle->data_done = 1;
 
 			if (status == TINFL_STATUS_DONE || pngle->avail_out == 0) {
 
@@ -660,7 +665,6 @@ static int pngle_feed_internal(pngle_t *pngle, const uint8_t *buf, size_t len)
 			break;
 
 		case PNGLE_CHUNK_IDAT:
-			if (pngle->chunk_remain <= 0) return PNGLE_ERROR("Invalid IDAT chunk size");
 			if (pngle->channels == 0) return PNGLE_ERROR("No IHDR chunk is found");
 			if (pngle->hdr.color_type == 3 && pngle->palette == NULL) return PNGLE_ERROR("No PLTE chunk is found");
 
@@ -698,6 +702,11 @@ static int pngle_feed_internal(pngle_t *pngle, const uint8_t *buf, size_t len)
 		case PNGLE_CHUNK_IEND:
 			if (pngle->next_out == NULL) return PNGLE_ERROR("No IDAT chunk is found");
 			if (pngle->chunk_remain > 0) return PNGLE_ERROR("Invalid IEND chunk size");
+			if (!pngle->data_done || pngle->drawing_x < pngle->hdr.width ||
+				pngle->drawing_y + interlace_div_y[pngle->interlace_pass] < pngle->hdr.height) return PNGLE_ERROR("Incomplete PNG image");
+			if (pngle->hdr.interlace)
+				for (uint_fast8_t pass = pngle->interlace_pass + 1; pass < 8; ++pass)
+					if (interlace_off_x[pass] < pngle->hdr.width && interlace_off_y[pass] < pngle->hdr.height) return PNGLE_ERROR("Incomplete PNG image");
 			break;
 
 		case PNGLE_CHUNK_tRNS:
@@ -773,6 +782,11 @@ static int pngle_feed_internal(pngle_t *pngle, const uint8_t *buf, size_t len)
 	}
 
 	return PNGLE_ERROR("Invalid state");
+}
+
+void pngle_abort(pngle_t *pngle)
+{
+	if (pngle) pngle->state = PNGLE_STATE_ERROR;
 }
 
 int pngle_feed(pngle_t *pngle, const void *buf, size_t len)
