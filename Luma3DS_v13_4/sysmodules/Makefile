@@ -1,3 +1,5 @@
+export MAKEROM_BLZ_OPTIMAL := 1
+
 ifeq ($(BUILD_FOR_EXPLOIT_DEV),1)
 
 	SUBFOLDERS := loader

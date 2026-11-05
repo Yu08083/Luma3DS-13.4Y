@@ -164,15 +164,16 @@ static int thread_compare_func(const void *a_, const void *b_)
 
 u32 GDB_GetCurrentThreadFromList(GDBContext *ctx, u32 *threadIds, u32 nbThreads)
 {
-    struct ThreadIdWithCtx lst[MAX_DEBUG_THREAD];
-    for(u32 i = 0; i < nbThreads; i++)
+    if (nbThreads == 0)
+        return 0;
+    struct ThreadIdWithCtx selected = {ctx, threadIds[0]};
+    for (u32 i = 1; i < nbThreads; ++i)
     {
-        lst[i].ctx = ctx;
-        lst[i].id = threadIds[i];
+        struct ThreadIdWithCtx candidate = {ctx, threadIds[i]};
+        if (thread_compare_func(&candidate, &selected) < 0)
+            selected = candidate;
     }
-
-    qsort(lst, nbThreads, sizeof(struct ThreadIdWithCtx), thread_compare_func);
-    return lst[0].id;
+    return selected.id;
 }
 
 u32 GDB_GetCurrentThread(GDBContext *ctx)

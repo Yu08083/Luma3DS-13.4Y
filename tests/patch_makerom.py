@@ -19,8 +19,11 @@ patched = tool.patch(raw)
 assert tool.patch(raw.replace(b'\n', b'\r\n')) == patched
 assert tool.patch(patched) == patched
 assert patched.count(tool.MODE_EXPRESSION.encode()) == 2
-assert patched.replace(tool.MODE_EXPRESSION.encode(), b'BLZ_NORMAL') == raw
-for changed in [raw + b' ', raw.replace(b'BLZ_NORMAL', b'BLZ_BEST', 1), patched.replace(b'MAKEROM_BLZ_BEST', b'OTHER_MODE', 1)]:
+body = patched[len(tool.OPTIMAL_PREFIX):]
+assert body.replace(tool.MODE_EXPRESSION.encode(), b'BLZ_NORMAL').replace(b'YuBlz_Code(', b'BLZ_Code(') == raw
+old_patch = raw.replace(b', BLZ_NORMAL);', b', ' + tool.MODE_EXPRESSION.encode() + b');')
+assert tool.patch(old_patch) == patched
+for changed in [raw + b' ', raw.replace(b'BLZ_NORMAL', b'BLZ_BEST', 1), patched.replace(b'MAKEROM_BLZ_BEST', b'OTHER_MODE', 1), body, patched.replace(b'YuBlz_Code(', b'BLZ_Code(', 1)]:
     try:
         tool.patch(changed)
         raise AssertionError('Unknown source accepted')
@@ -58,7 +61,8 @@ with tempfile.TemporaryDirectory(prefix='makerom-patch-') as directory:
 makefile = (ROOT / 'Luma3DS_v13_4/sysmodules/rosalina/Makefile').read_text()
 assert '$(OUTPUT).cxi: export MAKEROM_BLZ_BEST := 1' in makefile
 assert 'rp_jpeg.o: CFLAGS += -O2' not in makefile
-report = {'all_passed': True, 'upstream_commit': tool.UPSTREAM_COMMIT, 'upstream_url': tool.UPSTREAM_URL, 'original_sha256': tool.ORIGINAL_SHA256, 'patched_sha256': hashlib.sha256(patched).hexdigest(), 'tool_sha256': hashlib.sha256((ROOT / 'tools/patch_makerom.py').read_bytes()).hexdigest(), 'mode_cases': modes, 'unknown_source_rejected_without_write': True, 'idempotent': True, 'default_mode_preserved': True, 'only_rosalina_enables_best': True}
+assert 'export MAKEROM_BLZ_OPTIMAL := 1' in (ROOT / 'Luma3DS_v13_4/sysmodules/Makefile').read_text()
+report = {'all_passed': True, 'upstream_commit': tool.UPSTREAM_COMMIT, 'upstream_url': tool.UPSTREAM_URL, 'original_sha256': tool.ORIGINAL_SHA256, 'patched_sha256': hashlib.sha256(patched).hexdigest(), 'tool_sha256': hashlib.sha256((ROOT / 'tools/patch_makerom.py').read_bytes()).hexdigest(), 'optimal_header_sha256': hashlib.sha256(tool.OPTIMAL_HEADER).hexdigest(), 'mode_cases': modes, 'unknown_source_rejected_without_write': True, 'idempotent': True, 'default_mode_preserved': True, 'only_rosalina_enables_best': True, 'all_sysmodules_enable_optimal': True}
 output = ROOT / 'build/makerom-patch-tests'
 output.mkdir(parents=True, exist_ok=True)
 (output / 'proof.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')

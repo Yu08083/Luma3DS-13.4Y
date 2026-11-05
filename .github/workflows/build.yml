@@ -42,6 +42,8 @@ jobs:
       - run: python3 tests/streaming.py
       - run: python3 tests/streaming_pacing.py
       - run: python3 tests/patch_makerom.py
+      - run: python3 tests/blz_optimal.py
+      - run: python3 tests/gdb_thread_minimum.py
       - run: python3 tests/adorable_ntr.py
       - run: python3 tests/streaming_jpeg.py
       - run: python3 tests/streaming_platform.py
