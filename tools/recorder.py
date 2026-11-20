@@ -165,12 +165,12 @@ def host_tests(work, compiler=None):
     if compiler:
         environment['CC'] = compiler
     host_compiler = environment.get('CC', 'cc')
-    run(['make', 'test', '-j2', 'CC=' + host_compiler + ' -D_POSIX_C_SOURCE=200809L'], cwd=tests, env=environment)
+    run(['make', 'test', '-j2', 'CC=' + host_compiler + ' -D_POSIX_C_SOURCE=200809L -D_FILE_OFFSET_BITS=64'], cwd=tests, env=environment)
     binaries = {name: receipt(tests / name) for name in ('test_bench', 'test_convert', 'test_codec',
                 'test_audio', 'test_huff', 'test_fused', 'test_unwrap', 'test_autostart', 'test_front',
                 'test_plgring', 'test_appletguard', 'test_join')}
     record(work / 'host-tests.json', {'all_passed': True, 'suites': 12,
-                                    'compiler': host_compiler, 'feature_macros': ['_POSIX_C_SOURCE=200809L'],
+                                    'compiler': host_compiler, 'feature_macros': ['_POSIX_C_SOURCE=200809L', '_FILE_OFFSET_BITS=64'],
                                     'binaries': binaries})
 
 

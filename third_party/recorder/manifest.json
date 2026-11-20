@@ -6,7 +6,8 @@
   "repository": "https://github.com/BolgarMaxym97/3ds-recorder",
   "image": "devkitpro/devkitarm@sha256:15b79ce75822c289538d8153da5fa7aafe5e6adc32ad8a575a197beca0f0761b",
   "patches": [
-    {"path": "third_party/recorder/control.patch", "sha256": "a5ccc9d67aa57134b53c58316e6641491f2edf84155e70cd6948105257eacf42"}
+    {"path": "third_party/recorder/control.patch", "sha256": "a5ccc9d67aa57134b53c58316e6641491f2edf84155e70cd6948105257eacf42"},
+    {"path": "third_party/recorder/host-tests.patch", "sha256": "60dc8ca03063532121fad79eeccf9ce79b22810c84b082120c995f822d56c06b"}
   ],
   "sources": {
     "recorder": {
