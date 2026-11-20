@@ -62,8 +62,15 @@ static Result recorderLaunch(void)
     for(u32 attempt = 0; attempt < 60 && !menuShouldExit; ++attempt)
     {
         u32 status[12];
-        if(R_SUCCEEDED(recorderRequest(1, 0, status)) && status[3] == YU_REC_IDLE)
-            return recorderRequest(2, YU_REC_CMD_START, NULL);
+        if(R_SUCCEEDED(recorderRequest(1, 0, status)))
+        {
+            if(status[3] == YU_REC_IDLE || status[3] == YU_REC_REPLAY)
+                return recorderRequest(2, YU_REC_CMD_START, NULL);
+            if(status[3] == YU_REC_RECORDING)
+                return 0;
+            if(status[3] == YU_REC_ERROR)
+                return R_FAILED((Result)status[10]) ? (Result)status[10] : (Result)YU_REC_ERROR_STATE;
+        }
         svcSleepThread(50000000LL);
     }
     return -3;

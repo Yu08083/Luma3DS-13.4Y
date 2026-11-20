@@ -13,6 +13,9 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'third_party/recorder/manifest.json'
 TITLE_ID = 0x0004013000F1D302
+LICENSE_NAMES = ('3DS-Recorder.txt', 'minih264.txt', 'vo-aacenc.txt', 'vo-aacenc-NOTICE.txt',
+                 'vo-aacenc-common-NOTICE.txt', 'vo-aacenc-aacenc-NOTICE.txt', 'mp4-muxer.txt',
+                 'Inter-OFL.txt', 'qrcodegen.txt', 'Luma3DS-csvc.txt')
 
 
 def digest(data):
@@ -288,6 +291,8 @@ def licenses(source):
     if marker < 0 or b'This notice may not be removed' not in data[:marker]:
         raise ValueError('Luma3DS assembly license missing')
     result['Luma3DS-csvc.txt'] = data[:marker] + b'\n'
+    if set(result) != set(LICENSE_NAMES):
+        raise ValueError('Unexpected recorder license list')
     return result
 
 
@@ -345,6 +350,11 @@ def merge_runtime(firmware, runtime, destination):
     for source in (firmware, runtime):
         if not source.is_dir() or source.resolve() == destination.resolve() or source.resolve() in destination.resolve().parents:
             raise ValueError('Use a separate staging destination')
+    config = json.loads(MANIFEST.read_text(encoding='utf-8'))
+    expected = {name for key, name in config['runtime'].items() if key != 'licenses'}
+    expected.update(config['runtime']['licenses'] + '/' + name for name in LICENSE_NAMES)
+    if set(source_files(runtime)) != expected:
+        raise ValueError('Unexpected or missing recorder runtime files')
     files = {}
     for source in (firmware, runtime):
         for path in sorted(source.rglob('*')):
@@ -359,7 +369,6 @@ def merge_runtime(firmware, runtime, destination):
             if name in files and data != files[name]:
                 raise ValueError('Conflicting runtime file: ' + name)
             files[name] = data
-    config = json.loads(MANIFEST.read_text(encoding='utf-8'))
     if not all(name in files for key, name in config['runtime'].items() if key != 'licenses'):
         raise ValueError('Recorder runtime is incomplete')
     ncch(files[config['runtime']['module']])

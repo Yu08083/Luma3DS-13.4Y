@@ -157,6 +157,7 @@ static const LangEntry g_labels[] =
     { "A: record", "A: 録画" },
     { "A: save   B: cancel", "A: 保存   B: 取消" },
     { "A: start     B: back", "A: 開始   B: 戻る" },
+    { "A: stop", "A: 停止" },
     { "A: stop      B: back", "A: 停止   B: 戻る" },
     { "A: type   X: backspace   Y: case", "A: 入力 X: 1文字削除 Y: 大小切替" },
     { "A: use   X: pin/unpin   B: none", "A: 使用 X: 常用切替 B: 使用しない" },

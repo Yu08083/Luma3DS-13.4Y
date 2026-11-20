@@ -75,13 +75,17 @@ def main():
             target = runtime / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
+        for name in recorder.LICENSE_NAMES:
+            target = runtime / manifest['runtime']['licenses'] / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text('license fixture', encoding='ascii')
         merged = base / 'merged'
         result = recorder.merge_runtime(firmware, runtime, merged)
         assert result['all_passed'] and (merged / 'boot.firm').read_bytes() == original_firmware
         for name, data in files.items():
             assert (merged / name).read_bytes() == data
         sums = (merged / 'SHA256SUMS.txt').read_text(encoding='ascii').splitlines()
-        assert len(sums) == 4
+        assert len(sums) == 4 + len(recorder.LICENSE_NAMES)
         for line in sums:
             expected, name = line.split('  ', 1)
             assert recorder.digest((merged / name).read_bytes()) == expected
@@ -96,6 +100,13 @@ def main():
         conflict = base / 'conflict'
         rejected(recorder.merge_runtime, firmware, runtime, conflict)
         assert not conflict.exists()
+        cases += 1
+        (runtime / 'boot.firm').unlink()
+        collision = firmware / manifest['runtime']['module']
+        collision.parent.mkdir(parents=True, exist_ok=True)
+        collision.write_bytes(b'other recorder')
+        rejected(recorder.merge_runtime, firmware, runtime, conflict)
+        assert not conflict.exists() and collision.read_bytes() == b'other recorder'
         cases += 1
         for index, name in enumerate(('root/../../outside', '/root/outside', 'root/a:b', 'root/a\\b')):
             packed = io.BytesIO()

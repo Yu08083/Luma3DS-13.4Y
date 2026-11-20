@@ -22,6 +22,13 @@ language = module / 'source/menus/lang.c'
 body = '\n'.join(line for line in source.read_text().splitlines() if not line.startswith('#include'))
 lang = language.read_text(encoding='utf-8')
 labels = lang[lang.index('typedef struct { const char *english;'):lang.index('\nconst char *Lang(u32 id)')]
+label_table = labels[:labels.index('\nconst char *Lang_Translate')]
+translations = dict((json.loads(english), json.loads(japanese)) for english, japanese in re.findall(
+    r'\{\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")\s*\}', label_table))
+for label in ['SD recording', 'Starting...', 'Ready', 'Recording', 'Saving...', 'Error', 'OFF', 'Replay',
+              'Time: %lu s  Files: %lu', 'MP4 / settings: Yu_ Recorder', 'Enable external modules at boot.',
+              'Stop Yu_ Capture first.', 'Operation failed (0x%08lx).', 'A: record', 'A: stop', 'Y: shut down  B: back']:
+    assert label in translations, label
 
 prefix = r'''
 #include <assert.h>
@@ -63,7 +70,7 @@ static bool port_open,streaming,live_handles[1024],override_header;
 static unsigned handle_cursor,connect_count,close_count,send_count,launch_count,sleep_count,system_info_count;
 static unsigned command_count,commands[128],status_count,open_after_sleep;
 static Result connect_result,send_result,status_result,command_result,system_result,launch_result;
-static u32 reply_header,reply_magic,reply_version,rec_state,last_error,seconds,files;
+static u32 reply_header,reply_magic,reply_version,rec_state,last_error,seconds,files,launch_state;
 static s64 system_options;
 static u32 ipc[64];
 static void (*wait_hook)(unsigned);
@@ -137,13 +144,13 @@ static Result PMAPP_LaunchTitle(const FS_ProgramInfo *program,u32 flags)
 {
     CHECK(!lock_depth&&program->programId==YU_REC_TITLE_ID&&program->mediaType==MEDIATYPE_NAND&&!flags);
     ++launch_count;
-    if(R_SUCCEEDED(launch_result)&&!open_after_sleep){port_open=true;rec_state=YU_REC_IDLE;}
+    if(R_SUCCEEDED(launch_result)&&!open_after_sleep){port_open=true;rec_state=launch_state;}
     return launch_result;
 }
 static Result svcSleepThread(s64 duration)
 {
     CHECK(!lock_depth&&duration==50000000LL);++sleep_count;
-    if(open_after_sleep&&sleep_count==open_after_sleep){port_open=true;rec_state=YU_REC_IDLE;}
+    if(open_after_sleep&&sleep_count==open_after_sleep){port_open=true;rec_state=launch_state;}
     return 0;
 }
 static bool RemotePlay_IsRunning(void) { CHECK(!lock_depth);return streaming; }
@@ -157,7 +164,7 @@ static void reset(bool active)
     frame_count=key_index=0;key_count=1;keys[0]=KEY_B;port_open=active;streaming=false;menuShouldExit=false;
     handle_cursor=connect_count=close_count=send_count=launch_count=sleep_count=system_info_count=0;
     command_count=status_count=open_after_sleep=0;connect_result=send_result=status_result=command_result=system_result=launch_result=0;
-    reply_header=0;override_header=false;reply_magic=YU_REC_MAGIC;reply_version=YU_REC_PROTOCOL_VERSION;rec_state=YU_REC_IDLE;last_error=0;seconds=42;files=7;
+    reply_header=0;override_header=false;reply_magic=YU_REC_MAGIC;reply_version=YU_REC_PROTOCOL_VERSION;rec_state=launch_state=YU_REC_IDLE;last_error=0;seconds=42;files=7;
     system_options=2;g_language=LANG_EN;wait_hook=NULL;++case_count;
 }
 static bool contains(unsigned frame,const char *text)
@@ -209,6 +216,11 @@ int main(void)
     reset(false);launch_result=-106;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&!command_count&&sleep_count==0);no_live_handles();
     reset(false);open_after_sleep=1000;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&!command_count&&sleep_count==60);no_live_handles();
     reset(false);open_after_sleep=3;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START&&sleep_count==3);no_live_handles();
+    reset(false);launch_state=YU_REC_REPLAY;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START&&rec_state==YU_REC_RECORDING&&!sleep_count);no_live_handles();
+    reset(false);launch_state=YU_REC_RECORDING;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&!command_count&&rec_state==YU_REC_RECORDING&&!sleep_count);no_live_handles();
+    reset(false);launch_state=YU_REC_ERROR;last_error=0xC920181A;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&!command_count&&!sleep_count&&contains(frame_count-1,"0xc920181a"));no_live_handles();
+    reset(false);launch_state=YU_REC_ERROR;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&!command_count&&!sleep_count&&contains(frame_count-1,"0xd8a3fbf5"));no_live_handles();
+    reset(false);launch_state=YU_REC_ERROR;last_error=1;input(KEY_A);RosalinaMenu_Recorder();CHECK(launch_count==1&&!command_count&&!sleep_count&&contains(frame_count-1,"0xd8a3fbf5"));no_live_handles();
     reset(true);reply_version++;input(KEY_A);RosalinaMenu_Recorder();CHECK(!launch_count&&!command_count);no_live_handles();
     reset(true);reply_magic^=1;input(KEY_A);RosalinaMenu_Recorder();CHECK(!launch_count&&!command_count);no_live_handles();
     reset(false);key_count=3;keys[0]=keys[1]=KEY_A;keys[2]=KEY_B;RosalinaMenu_Recorder();CHECK(launch_count==1&&command_count==2&&commands[0]==YU_REC_CMD_START&&commands[1]==YU_REC_CMD_STOP);no_live_handles();
