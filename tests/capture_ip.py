@@ -157,7 +157,7 @@ int main(void)
   japanese=language;g_safeMode=safe;themeEnabled=theme;state.valid=false;
   menuIsRelease=false;menuVersionLoaded=true;batteryTemperature=255;batteryVoltage=5.25f;batteryPercentage=100;
   testNow+=1000;draw(&rosalinaMenu,&state,true);CHECK(has("255.255.255.254"));geometry();
-  CHECK(has("Luma3DS ver.y20-0000002a"));
+  CHECK(has("Luma3DS ver.y21-0000002a"));
   char name[64];snprintf(name,sizeof(name),"language%u-safe%u-theme%u",language,safe,theme);frame(name);
  }
  miniSocEnabled=false;captureRunning=false;state.valid=false;testNow+=1000;
@@ -181,7 +181,7 @@ int main(void)
 }
 '''
 target = args.output / 'capture_ip.c'
-target.write_text('#define NEWER 1\n#define FORK_DISPLAY_VERSION "v13.5Y"\n#define FORK_RELEASE_VERSION ' + release + '\n' + prefix + code + main, encoding='utf8')
+target.write_text('#define NEWER 1\n#define FORK_DISPLAY_VERSION "v13.6Y"\n#define FORK_RELEASE_VERSION ' + release + '\n' + prefix + code + main, encoding='utf8')
 binary = target.with_suffix('.exe' if os.name == 'nt' else '')
 command = [compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-variable',
            '-I' + str(base / 'include'), str(target), str(base / 'source/menu_capture_ip.c'), str(base / 'source/text.c'), '-o', str(binary)]

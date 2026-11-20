@@ -1,0 +1,45 @@
+name: Build external recorder
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recorder:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm@sha256:15b79ce75822c289538d8153da5fa7aafe5e6adc32ad8a575a197beca0f0761b
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install host tools
+        shell: bash
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends g++ cmake python3 git make
+      - name: Prepare pinned recorder
+        run: python3 tools/recorder.py prepare --work /tmp/yu-recorder
+      - name: Check runtime packaging
+        run: python3 tools/recorder_tests.py --output /tmp/yu-recorder/packaging-tests.json
+      - name: Build recorder and companion
+        run: python3 tools/recorder.py build --work /tmp/yu-recorder
+      - name: Recorder runtime
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: recorder-runtime
+          path: /tmp/yu-recorder/runtime/
+          if-no-files-found: error
+      - name: Recorder diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: recorder-diagnostics
+          path: |
+            /tmp/yu-recorder/diagnostics/
+            /tmp/yu-recorder/prepared.json
+            /tmp/yu-recorder/toolchain.json
+            /tmp/yu-recorder/host-tests.json
+            /tmp/yu-recorder/runtime.json
+            /tmp/yu-recorder/packaging-tests.json
+          if-no-files-found: warn

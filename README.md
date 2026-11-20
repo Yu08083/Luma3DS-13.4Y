@@ -1,6 +1,8 @@
-# Luma3DS v13.5Y
+# Luma3DS v13.6Y
 
-Luma3DS v13.5 に Luma3DS_New v1.3 由来の機能と日本語・English対応を組み込んだ版です。改修作者: `@yu_`。ver.y20。更新日: 2026-11-05。
+Luma3DS v13.5 を基にした改変版です。日本語・English対応。改修作者: `@yu_`。ver.y21。更新日: 2026-11-20。
+
+Rosalinaの `SD録画...` から、音声付きの画面録画を開始・停止できます。録画処理はSD上の外部モジュールで動作します。
 
 Yu_ キャプチャの開始中は、Rosalinaメニューの右上に本体IPを表示します。
 
@@ -12,7 +14,14 @@ New 3DSでは送信待ちの遅れを小さく補正し、圧縮処理の負荷�
 
 ## 導入
 
-[リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.5Y.zip` を展開し、中身をSDカードのルートへ上書きします。`boot.firm` と `3ds/luma/9.1/boot.firm`、`3ds/luma/13.5/boot.firm` が入ります。同梱のv9.1から切り替えられるよう、v13.5Yを `3ds/luma/13.4/boot.firm` にも配置します。
+[リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.6Y.zip` を展開し、中身をSDカードのルートへコピーします。設定・録画データは含みません。`boot.firm` と切替用の `3ds/luma/9.1/boot.firm`、`3ds/luma/13.6/boot.firm`、旧版との互換用コピーが入ります。
+
+SD録画の初回導入ではZIPの全ファイルをコピーしてください。更新用CIAだけでは録画モジュールを導入できません。電源投入時にSELECTを押し、外部FIRM・モジュールの読み込みを有効にしてSTARTで保存します。
+
+- `SD録画...` のAで録画開始・停止、Yで録画モジュールを終了します。初期状態では起動していません。
+- 保存先は `3ds/recorder/recordings/` です。Homebrew Launcherで `Yu_ Recorder` を開くと、録画一覧・MP4変換・録画設定を利用できます。
+- Yu_ キャプチャとの同時使用は避けてください。Rosalinaからは相互に開始を止めます。録画アプリやホットキーからの操作は上流の仕様です。
+- Oldの拡張メモリ用ゲームでは補助3GXを使うため、その起動時に別の3GXと併用できない場合があります。DS・GBAモードは録画できません。
 
 [本家v13.5配布版](https://github.com/LumaTeam/Luma3DS/releases/tag/v13.5)の[Homebrew Menu](https://github.com/devkitPro/3ds-hbmenu)（`boot.3dsx`）と `config/ssl/cacert.pem` も同梱しています。
 
@@ -32,11 +41,11 @@ Old 3DS / Old 2DSは低負荷の送信経路を使用します。画質と解像
 
 3DS実機での起動・FTP接続・画面転送は未確認です。
 
-v13.5Yへの更新はZIPの全ファイルをSDカードへ上書きし、本体を再起動してください。
+v13.6Yへの更新はZIPの全ファイルをSDカードへ上書きし、本体を再起動してください。
 
 ## ビルド
 
-リリースの `Luma3DS-v13.5Y-source.zip`、またはこのリポジトリのソースを使用します。devkitProの3DS環境、git、make、Python 3、makerom、firmtoolを用意し、空白・日本語を含まないパスで実行します。
+リリースの `Luma3DS-v13.6Y-source.zip`、またはこのリポジトリのソースを使用します。devkitProの3DS環境、git、make、Python 3、makerom、firmtoolを用意し、空白・日本語を含まないパスで実行します。
 
 ```sh
 bash build.bat 1
@@ -48,8 +57,8 @@ Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生�
 
 makeromは[固定コミット](https://github.com/3DSGuy/Project_CTR/tree/e8f5f529c54ff9b22a2491a480ffa69206bf7b19)を取得し、`python3 tools/patch_makerom.py <Project_CTR>/makerom/src/code.c` を適用してからビルド・配置してください。CIも同じ手順で準備します。
 
-切り替え用v9.1の元ファイルは `assets/legacy/boot-9.1.firm`、対応ソースは `Luma3DS_v9_1/` です。通常のビルドではv13.5Yをビルドし、検証済みのv9.1を同梱します。
+切り替え用v9.1の元ファイルは `assets/legacy/boot-9.1.firm`、対応ソースは `Luma3DS_v9_1/` です。通常のビルドではv13.6Yをビルドし、検証済みのv9.1を同梱します。
 
 ## ライセンス
 
-Luma3DSと改変部分は [GPLv3](LICENSE.txt) です。元の著作権・ライセンス表記は各ソースに保持しています。[美咲フォント](assets/fonts/LICENSE.txt)、[テーマ画像デコーダー](third_party/theme/LICENSE.txt)、[無線画面転送](third_party/streaming/LICENSE.txt)、[Mbed TLS](Luma3DS_v13_4/sysmodules/rosalina/third_party/mbedtls/LICENSE)のライセンスも同梱しています。
+Luma3DSと改変部分は [GPLv3](LICENSE.txt) です。元の著作権・ライセンス表記は各ソースに保持しています。[美咲フォント](assets/fonts/LICENSE.txt)、[テーマ画像デコーダー](third_party/theme/LICENSE.txt)、[無線画面転送](third_party/streaming/LICENSE.txt)、[Mbed TLS](Luma3DS_v13_4/sysmodules/rosalina/third_party/mbedtls/LICENSE)のライセンスも同梱しています。SD録画は [3DS Recorder v1.4.0](https://github.com/BolgarMaxym97/3ds-recorder/tree/v1.4.0)を基にしており、元のライセンスを同梱します。

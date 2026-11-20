@@ -1,4 +1,4 @@
-name: Build Luma3DS v13.5Y
+name: Build Luma3DS v13.6Y
 
 on:
   push:
@@ -49,6 +49,8 @@ jobs:
       - run: python3 tests/streaming_platform.py
       - run: python3 tests/streaming_old3ds.py
       - run: python3 tests/streaming_menu.py
+      - run: python3 tests/recorder_client.py
+      - run: python3 tests/recorder_server.py
       - run: python3 tests/plugin_payload.py
       - run: python3 tests/plugin_format.py
       - run: python3 tests/plugin_security.py
@@ -85,7 +87,7 @@ jobs:
           make -C /tmp/project-ctr/makerom deps -j2
           make -C /tmp/project-ctr/makerom -j2
           install /tmp/project-ctr/makerom/bin/makerom /usr/local/bin/makerom
-      - name: Build Luma3DS v13.5Y
+      - name: Build Luma3DS v13.6Y
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -99,14 +101,14 @@ jobs:
       - name: Firmware
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Luma3DS-v13.5Y
+          name: Luma3DS-v13.6Y
           path: 3DS/
           if-no-files-found: error
       - name: Firmware diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Luma3DS-v13.5Y-diagnostics
+          name: Luma3DS-v13.6Y-diagnostics
           path: |
             Luma3DS_v13_4/boot.firm
             Luma3DS_v13_4/sysmodules/rosalina/rosalina.elf

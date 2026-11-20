@@ -329,7 +329,7 @@ for version in ('Luma3DS_v13_4',):
     if newer:
         waits = source[source.index('static u32 waitInputTimed('):source.index('static u32 scanHeldKeys(')] + waits
     release = (base / 'include/menu.h').read_text(encoding='utf8').split('#define FORK_RELEASE_VERSION ', 1)[1].splitlines()[0]
-    target.write_text('#define NEWER ' + str(int(newer)) + '\n#define FORK_RELEASE_VERSION ' + release + '\n#define FORK_DISPLAY_VERSION "' + ('v13.5Y' if newer else 'v9.1') + '"\n' + prefix + waits + code + main, encoding='utf-8', newline='\n')
+    target.write_text('#define NEWER ' + str(int(newer)) + '\n#define FORK_RELEASE_VERSION ' + release + '\n#define FORK_DISPLAY_VERSION "' + ('v13.6Y' if newer else 'v9.1') + '"\n' + prefix + waits + code + main, encoding='utf-8', newline='\n')
     executable = target.with_suffix('.exe' if os.name == 'nt' else '')
     subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function', '-Wno-unused-variable', '-O2', '-I' + str(base / 'include'), str(target), str(base / 'source/menu_input.c'), str(base / 'source/text.c'), str(base / 'source/menu_capture_ip.c'), '-o', str(executable)], check=True, env=env)
     subprocess.run([str(executable)], check=True, env=env)

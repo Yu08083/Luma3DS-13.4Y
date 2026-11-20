@@ -1150,7 +1150,7 @@ void configMenu(bool oldPinStatus, u32 oldPinMode)
             singleOptionsText = BootLanguage_IsJapanese() ? singleOptionsTextJapanese : singleOptionsTextEnglish;
             optionsDescription = BootLanguage_IsJapanese() ? optionsDescriptionJapanese : optionsDescriptionEnglish;
             clearScreens(false);
-            drawString(true, 10, 10, COLOR_TITLE, BootLanguage_IsJapanese() ? "Luma3DS v13.5Y 設定" : CONFIG_TITLE);
+            drawString(true, 10, 10, COLOR_TITLE, BootLanguage_IsJapanese() ? "Luma3DS v13.6Y 設定" : CONFIG_TITLE);
             drawString(true, 10, 20, COLOR_TITLE, BootLanguage_Text("Use the DPAD and A to change settings"));
             drawString(true, 10, 30, COLOR_TITLE, BootLanguage_Selector());
             drawFormattedString(false, 10, SCREEN_HEIGHT - 2 * SPACING_Y, COLOR_YELLOW, BootLanguage_Text("Booted from %s via %s"), isSdMode ? "SD" : "CTRNAND", bootTypes[(u32)bootType]);

@@ -1,7 +1,7 @@
 :<<"::BASH_BEGIN"
 @echo off
 setlocal EnableExtensions
-title Luma3DS v13.5Y build
+title Luma3DS v13.6Y build
 cd /d "%~dp0"
 
 set "RC=0"
@@ -30,7 +30,7 @@ set -Eeuo pipefail
 
 SEL="${1:-1}"
 case "$SEL" in
-  1|2|all|v13.5|v13.5Y) MODE=v13.5 ;;
+  1|2|all|v13.5|v13.6Y) MODE=v13.5 ;;
   4|clean) MODE=clean ;;
   *) echo "!! 1・2（ビルド）か4（clean）を指定してください（指定値: $SEL）" >&2; exit 1 ;;
 esac
@@ -68,7 +68,7 @@ trap 'echo; echo "!! ${STAGE}に失敗しました。詳細は build.log を確�
 
 if [ "$MODE" = clean ]; then
   STAGE="make clean"
-  printf 'v13.5Y を make clean 中...'
+  printf 'v13.6Y を make clean 中...'
   make -C "$V135_DIR" clean >> "$LOG" 2>&1
   echo " 完了"
   trap - ERR
@@ -211,8 +211,8 @@ report_kext() {
   fi
 }
 
-build_version "v13.5Y" "$V135_DIR" "$V135_CTRU" all "$V135_FIRM"
-report_kext "$V135_DIR/k11_extension/k11_extension.elf" 0x70000000 "v13.5Y"
+build_version "v13.6Y" "$V135_DIR" "$V135_CTRU" all "$V135_FIRM"
+report_kext "$V135_DIR/k11_extension/k11_extension.elf" 0x70000000 "v13.6Y"
 
 STAGE="3DS フォルダの作成"
 rm -rf "$DIST"

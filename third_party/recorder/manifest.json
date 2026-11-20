@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "name": "3DS Recorder",
+  "version": "1.4.0",
+  "license": "MIT",
+  "repository": "https://github.com/BolgarMaxym97/3ds-recorder",
+  "image": "devkitpro/devkitarm@sha256:15b79ce75822c289538d8153da5fa7aafe5e6adc32ad8a575a197beca0f0761b",
+  "patches": [
+    {"path": "third_party/recorder/control.patch", "sha256": "a5ccc9d67aa57134b53c58316e6641491f2edf84155e70cd6948105257eacf42"}
+  ],
+  "sources": {
+    "recorder": {
+      "commit": "7e2be022297fa0840409ccbd71539a0d5d71d88a",
+      "url": "https://codeload.github.com/BolgarMaxym97/3ds-recorder/tar.gz/7e2be022297fa0840409ccbd71539a0d5d71d88a",
+      "sha256": "d1ac9fc15f6a87e59d4088c479255b05c50bc67535e76490ae1adae5f608f75c"
+    },
+    "libctru": {
+      "commit": "62b7c42c88b1ee837f513358409d2e5c8f9001a9",
+      "url": "https://codeload.github.com/devkitPro/libctru/tar.gz/62b7c42c88b1ee837f513358409d2e5c8f9001a9",
+      "sha256": "d102e01166f8de8a547b160a6b5071c1fdabca4b13296a9380b52477ed8734cd"
+    },
+    "makerom": {
+      "commit": "e8f5f529c54ff9b22a2491a480ffa69206bf7b19",
+      "url": "https://codeload.github.com/3DSGuy/Project_CTR/tar.gz/e8f5f529c54ff9b22a2491a480ffa69206bf7b19",
+      "sha256": "6b757ab8b8e4715047db9ddeb91f89e10e7165c3e803315d9d131a9297ca4fe0"
+    },
+    "3gxtool": {
+      "commit": "57e3160ab72d8533a2f0601efdc8a149b4825ea5",
+      "url": "https://gitlab.com/thepixellizeross/3gxtool/-/archive/57e3160ab72d8533a2f0601efdc8a149b4825ea5/3gxtool-57e3160ab72d8533a2f0601efdc8a149b4825ea5.tar.gz",
+      "sha256": "63caf03e5025ee516651b1e3f3a7f053b8710d2dd00fbe297297a290c09a3f34"
+    },
+    "yaml-cpp": {
+      "commit": "012269756149ae99745b6dafefd415843d7420bb",
+      "url": "https://codeload.github.com/jbeder/yaml-cpp/tar.gz/012269756149ae99745b6dafefd415843d7420bb",
+      "sha256": "25664d95600d5b4366f530c260a6cedc0566010612e662cf6409d730446fdd72"
+    },
+    "dynalo": {
+      "commit": "a69019a5b7deb7e5b7616951dd003da519379a71",
+      "url": "https://codeload.github.com/maddouri/dynalo/tar.gz/a69019a5b7deb7e5b7616951dd003da519379a71",
+      "sha256": "868b64902851768f980dedae4b9ca0de7df233cc6a81df653bd2854739988982"
+    }
+  },
+  "runtime": {
+    "module": "luma/sysmodules/0004013000F1D302.cxi",
+    "launcher": "3ds/recorder/rec3ds-launch.3gx",
+    "companion": "3ds/Yu_Recorder/Yu_Recorder.3dsx",
+    "licenses": "3ds/Yu_Recorder/licenses"
+  },
+  "upstream_reference": {
+    "url": "https://github.com/BolgarMaxym97/3ds-recorder/releases/download/v1.4.0/3ds-recorder.3dsx",
+    "bytes": 3012300,
+    "sha256": "a5599dea51ba492d65fb561307cfb0d64d6132d666e0f754820e59858191e691",
+    "embedded_module_bytes": 203776,
+    "embedded_module_sha256": "cd45ff6d03176c30f4d0dfaffd14ac6cbf75e4b5ad872c05ee52d8d9cb626e45"
+  }
+}

@@ -26,14 +26,14 @@ with tempfile.TemporaryDirectory() as temporary:
     current.write_bytes(data)
     output = temporary / 'SD'
     module.stage(current, output, legacy)
-    expected = {'boot.firm', '3ds/luma/9.1/boot.firm', '3ds/luma/13.4/boot.firm', '3ds/luma/13.5/boot.firm', 'SHA256SUMS.txt'} | set(module.UPSTREAM_FILES)
+    expected = {'boot.firm', '3ds/luma/9.1/boot.firm', '3ds/luma/13.4/boot.firm', '3ds/luma/13.5/boot.firm', '3ds/luma/13.6/boot.firm', 'SHA256SUMS.txt'} | set(module.UPSTREAM_FILES)
     assert {p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file()} == expected
-    assert (output / 'boot.firm').read_bytes() == (output / '3ds/luma/13.5/boot.firm').read_bytes() == (output / '3ds/luma/13.4/boot.firm').read_bytes() == data
+    assert (output / '3ds/luma/13.6/boot.firm').read_bytes() == (output / 'boot.firm').read_bytes() == (output / '3ds/luma/13.5/boot.firm').read_bytes() == (output / '3ds/luma/13.4/boot.firm').read_bytes() == data
     assert (output / '3ds/luma/9.1/boot.firm').read_bytes() == legacy.read_bytes()
     for line in (output / 'SHA256SUMS.txt').read_text().splitlines():
         digest, name = line.split('  ')
         assert hashlib.sha256((output / name).read_bytes()).hexdigest() == digest
-    assert len((output / 'SHA256SUMS.txt').read_text().splitlines()) == 6
+    assert len((output / 'SHA256SUMS.txt').read_text().splitlines()) == 7
     assert (output / 'boot.3dsx').read_bytes().startswith(b'3DSX')
     assert b'-----BEGIN CERTIFICATE-----' in (output / 'config/ssl/cacert.pem').read_bytes()
     for name, current_data, legacy_data in (
@@ -66,4 +66,4 @@ with tempfile.TemporaryDirectory() as temporary:
     else:
         raise AssertionError('Invalid upstream homebrew accepted')
     assert not rejected.exists()
-print(json.dumps({'passed': True, 'runtime_firmwares': 4, 'legacy_source_files': 330, 'rejections': 4}))
+print(json.dumps({'passed': True, 'runtime_firmwares': 5, 'legacy_source_files': 330, 'rejections': 4}))

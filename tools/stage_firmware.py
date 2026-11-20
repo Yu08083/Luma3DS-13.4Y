@@ -38,7 +38,8 @@ def stage(current, destination, legacy, upstream=None):
     check_firm(legacy_data)
     if len(legacy_data) != LEGACY_SIZE or hashlib.sha256(legacy_data).hexdigest() != LEGACY_SHA256:
         raise ValueError('Unexpected v9.1 FIRM')
-    files = {'boot.firm': current_data, '3ds/luma/13.5/boot.firm': current_data,
+    files = {'boot.firm': current_data, '3ds/luma/13.6/boot.firm': current_data,
+             '3ds/luma/13.5/boot.firm': current_data,
              '3ds/luma/13.4/boot.firm': current_data,
              '3ds/luma/9.1/boot.firm': legacy_data}
     upstream = upstream or Path(__file__).resolve().parents[1] / 'assets/upstream-13.5'

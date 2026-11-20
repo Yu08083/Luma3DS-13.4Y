@@ -326,7 +326,7 @@ bool loadVersionFirm(const char *target)
 
 
 
-    if(memcmp(target, "13.5", 4) == 0 || memcmp(target, "13.4", 4) == 0) return true;
+    if(memcmp(target, "13.6", 4) == 0 || memcmp(target, "13.5", 4) == 0 || memcmp(target, "13.4", 4) == 0) return true;
     if(memcmp(target, "9.1", 3) != 0) return false;
 
     const char *path = OTHER_FIRM_ARGV_PATH;

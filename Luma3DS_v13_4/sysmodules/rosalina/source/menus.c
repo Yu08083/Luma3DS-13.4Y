@@ -33,6 +33,7 @@
 #include "menus/online_id.h"
 #include "menus/online_bridge.h"
 #include "menus/streaming.h"
+#include "recorder.h"
 #include "menu.h"
 #include "draw.h"
 #include "menus/process_list.h"
@@ -58,6 +59,7 @@ Menu rosalinaMenu = {
     {
         { "Take screenshot", METHOD, .method = &RosalinaMenu_TakeScreenshot },
         { "Yu_ Capture...", METHOD, .method = &N3DSMenu_Streaming },
+        { "SD recording...", METHOD, .method = &RosalinaMenu_Recorder },
         { "Screen filters...", MENU, .menu = &screenFiltersMenu },
         { "Cheats...", METHOD, .method = &RosalinaMenu_Cheats },
         { "Plugin Loader: [Disabled]", METHOD, .method = PluginLoader__MenuCallback},
@@ -76,7 +78,7 @@ Menu rosalinaMenu = {
         { "File browser", METHOD, .method = &RosalinaMenu_FileBrowser },
         { "Save settings", METHOD, .method = &RosalinaMenu_SaveSettings },
         { "Return To HOME Menu", METHOD, .method = &RosalinaMenu_ReturnToHomeMenu },
-        { "Switch version (v9.1/v13.5Y)", METHOD, .method = &RosalinaMenu_ChainloadVersionToggle },
+        { "Switch version (v9.1/v13.6Y)", METHOD, .method = &RosalinaMenu_ChainloadVersionToggle },
         { "Power off / reboot", METHOD, .method = &RosalinaMenu_PowerOffOrReboot },
         { "Battery info", METHOD, .method = &RosalinaMenu_BatteryInfo },
         { "Memory dump", METHOD, .method = &RosalinaMenu_MemoryDump },
@@ -1165,7 +1167,7 @@ void RosalinaMenu_CheckSdCard(void)
     if (status[4] == 1 && status[2] == 1 && memcmp(headers[2], headers[0], 0x200) == 0)
         active = " (v9.1)";
     else if (status[4] == 1 && status[3] == 1 && memcmp(headers[2], headers[1], 0x200) == 0)
-        active = " (v13.5Y)";
+        active = " (v13.6Y)";
 
     u64 freeBytes = SD_FreeBytes();
 

@@ -24,6 +24,7 @@
 #include "menus/streaming.h"
 #include "minisoc.h"
 #include "remote_play.h"
+#include "recorder.h"
 
 typedef struct StreamingView {
     bool running;
@@ -115,7 +116,9 @@ static void drawStatus(const StreamingView *view)
     if(R_FAILED(view->result))
         Draw_DrawFormattedString(10, 142, g_textColor, Lang_Translate("Operation failed (0x%08lx)."),
                                  (unsigned long)(u32)view->result);
-    if(view->offline)
+    if(view->result == -4)
+        Draw_DrawString(10, 166, g_textColor, Lang_Translate("Shut down SD recording first."));
+    else if(view->offline)
         Draw_DrawString(10, 166, g_textColor, Lang_Translate("Waiting for Wi-Fi."));
     else if(view->running)
         Draw_DrawString(10, 166, g_textColor, Lang_Translate("Receiver: NTR mode"));
@@ -155,7 +158,7 @@ void N3DSMenu_Streaming(void)
             Draw_DrawString(10, 38, g_textColor, Lang_Translate(running ? "Stopping..." : "Starting..."));
             Draw_FlushFramebuffer();
             Draw_Unlock();
-            lastResult = running ? RemotePlay_Stop() : RemotePlay_Start();
+            lastResult = !running && Recorder_IsRunning() ? -4 : (running ? RemotePlay_Stop() : RemotePlay_Start());
             redraw = true;
         }
     }

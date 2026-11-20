@@ -34,7 +34,8 @@ translations = dict(pairs)
 for label in ['Yu_ Capture', 'State: %s', 'OFF', 'Streaming', 'Waiting for viewer',
               'Paused (offline)', '3DS IP: %s', 'Viewer IP: %s', 'FPS: %lu   Quality: %lu',
               'Waiting for Wi-Fi.', 'Receiver: NTR mode', 'Starting...', 'Stopping...',
-              'A: start     B: back', 'A: stop      B: back', 'Operation failed (0x%08lx).']:
+              'A: start     B: back', 'A: stop      B: back', 'Operation failed (0x%08lx).',
+              'Shut down SD recording first.']:
     assert label in translations
 glyph_header = (module / 'include/japanese_font.h').read_text()
 glyphs = {int(value, 16) for value in re.findall(r'0x([0-9A-F]{4})', glyph_header.split('japaneseGlyphs')[0])}
@@ -67,6 +68,8 @@ static Frame frames[64];
 static unsigned frame_count,lock_depth,start_count,stop_count,save_count,ip_count,wait_count,key_count,checks;
 static u32 keys[32],console_ip;
 static bool running;
+static bool recorder_running;
+static unsigned recorder_probe_count;
 static Result start_result,stop_result;
 static void (*wait_hook)(unsigned);
 #define CHECK(value) do { assert(value); ++checks; } while(0)
@@ -99,6 +102,7 @@ static u32 waitInputWithTimeout(u32 timeout)
 
 mocks = r'''
 static RemotePlayStatus status;
+bool Recorder_IsRunning(void) { CHECK(lock_depth==0);++recorder_probe_count;return recorder_running; }
 bool RemotePlay_IsRunning(void) { CHECK(lock_depth==0);return running; }
 void RemotePlay_GetStatus(RemotePlayStatus *out) { CHECK(lock_depth==0);*out=status; }
 Result RemotePlay_Start(void)
@@ -122,6 +126,7 @@ static void reset(bool active)
     CHECK(lock_depth==0);memset(frames,0,sizeof(frames));memset(&status,0,sizeof(status));
     frame_count=start_count=stop_count=save_count=ip_count=wait_count=0;
     key_count=1;keys[0]=KEY_B;running=active;menuShouldExit=false;start_result=stop_result=0;
+    recorder_running=false;recorder_probe_count=0;
     console_ip=0x0302010A;status.viewerIp=0x08070605;status.state=active?REMOTEPLAY_STREAMING:REMOTEPLAY_OFF;
     status.fps=30;status.quality=80;g_language=LANG_EN;wait_hook=NULL;
     g_textColor=0x5311;g_accentColor=0x7212;g_cursorColor=0x6313;
@@ -142,6 +147,7 @@ static void change_color(unsigned index) { if(!index)g_textColor=0x3313; }
 static void unseen_stat(unsigned index) { (void)index;++status.framesTop; }
 static void terminate(unsigned index) { (void)index;menuShouldExit=true; }
 static void change_running(unsigned index) { if(!index)running=false; }
+static void shut_down_recorder(unsigned index) { if(index==1)recorder_running=false; }
 static void save_frame(const char *name,unsigned frame)
 {
     FILE *file=fopen(name,"wb");CHECK(file!=NULL);
@@ -182,6 +188,17 @@ int main(void)
         CHECK(contains(1,language?"停止処理中":"Stopping"));
         reset(true);g_language=(LangCode)language;stop_result=(Result)0xC920181A;key_count=2;keys[0]=KEY_A;keys[1]=KEY_B;N3DSMenu_Streaming();
         CHECK(stop_count==1&&running&&save_count==1&&contains(2,"0xc920181a"));
+        reset(false);g_language=(LangCode)language;recorder_running=true;N3DSMenu_Streaming();
+        CHECK(!start_count&&!stop_count&&!recorder_probe_count&&!save_count);
+        reset(false);g_language=(LangCode)language;recorder_running=true;key_count=2;keys[0]=KEY_A;keys[1]=KEY_B;N3DSMenu_Streaming();
+        CHECK(!start_count&&!stop_count&&!running&&!save_count&&recorder_probe_count==1);
+        CHECK(contains(2,language?"SD録画を終了":"Shut down SD recording"));colors(2);
+        reset(true);g_language=(LangCode)language;recorder_running=true;key_count=2;keys[0]=KEY_A;keys[1]=KEY_B;N3DSMenu_Streaming();
+        CHECK(!start_count&&stop_count==1&&!running&&!save_count&&!recorder_probe_count);
+        reset(false);g_language=(LangCode)language;recorder_running=true;key_count=3;keys[0]=keys[1]=KEY_A;keys[2]=KEY_B;
+        wait_hook=shut_down_recorder;N3DSMenu_Streaming();
+        CHECK(start_count==1&&!stop_count&&running&&save_count==1&&recorder_probe_count==2);
+        CHECK(contains(4,language?"接続待ち":"Waiting for viewer")&&!contains(4,language?"SD録画を終了":"Shut down SD recording"));
     }
     reset(false);keys[0]=KEY_A|KEY_B;N3DSMenu_Streaming();CHECK(start_count==0&&stop_count==0);
     reset(true);key_count=3;keys[0]=keys[1]=0;keys[2]=KEY_B;N3DSMenu_Streaming();CHECK(frame_count==1&&save_count==1&&ip_count==3);
@@ -246,6 +263,7 @@ except ImportError:
 report = {'all_passed': True, 'assertions': int(result.stdout.split()[0]), 'languages': ['JP', 'EN'],
           'frame_bounds': [320, 240], 'backend_calls_outside_draw_lock': True,
           'viewer_save_on_exit_only': True, 'unchanged_status_skips_draw': True,
+          'recorder_exclusion': True, 'recording_stop_and_streaming_stop_remain_available': True,
           'snapshots': snapshots,
           'source_sha256': {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
                             for path in (menu_path, lang_path, header_path) if path.is_relative_to(root)},

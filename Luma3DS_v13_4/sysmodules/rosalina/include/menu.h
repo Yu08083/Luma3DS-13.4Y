@@ -26,11 +26,11 @@
 
 #pragma once
 
-#define FORK_LUMA_VERSION  "13.5"
+#define FORK_LUMA_VERSION  "13.6"
 #define FORK_OTHER_VERSION "9.1"
-#define FORK_DISPLAY_VERSION "v13.5Y"
+#define FORK_DISPLAY_VERSION "v13.6Y"
 #define FORK_OTHER_DISPLAY_VERSION "v9.1"
-#define FORK_RELEASE_VERSION "ver.y20"
+#define FORK_RELEASE_VERSION "ver.y21"
 
 extern u32 g_accentColor;
 extern u32 g_textColor;
