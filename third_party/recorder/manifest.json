@@ -21,6 +21,16 @@
       "url": "https://codeload.github.com/devkitPro/libctru/tar.gz/62b7c42c88b1ee837f513358409d2e5c8f9001a9",
       "sha256": "d102e01166f8de8a547b160a6b5071c1fdabca4b13296a9380b52477ed8734cd"
     },
+    "citro3d": {
+      "commit": "9f21cf7b380ce6f9e01a0420f19f0763e5443ca7",
+      "url": "https://codeload.github.com/devkitPro/citro3d/tar.gz/9f21cf7b380ce6f9e01a0420f19f0763e5443ca7",
+      "sha256": "e5471cf81a568402de6aeb49a9b7c885a6705e99b08c8177c0b872167bee8f6f"
+    },
+    "citro2d": {
+      "commit": "6d83b408806c4e1ecd66d8df96c2f9635cab9635",
+      "url": "https://codeload.github.com/devkitPro/citro2d/tar.gz/6d83b408806c4e1ecd66d8df96c2f9635cab9635",
+      "sha256": "76350f91bfa732cdf1da7e116222ba87fade1c3d6fa84ba2ca3efa0673893e85"
+    },
     "makerom": {
       "commit": "e8f5f529c54ff9b22a2491a480ffa69206bf7b19",
       "url": "https://codeload.github.com/3DSGuy/Project_CTR/tar.gz/e8f5f529c54ff9b22a2491a480ffa69206bf7b19",

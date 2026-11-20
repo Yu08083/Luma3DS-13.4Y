@@ -119,7 +119,8 @@ def build_tools(work, jobs):
     config = json.loads(MANIFEST.read_text(encoding='utf-8'))
     tool_root = work / 'tools'
     empty_directory(tool_root)
-    directories = {'libctru': tool_root / 'libctru', 'makerom': tool_root / 'makerom',
+    directories = {'libctru': tool_root / 'libctru', 'citro3d': tool_root / 'citro3d',
+                   'citro2d': tool_root / 'citro2d', 'makerom': tool_root / 'makerom',
                    '3gxtool': tool_root / '3gxtool', 'yaml-cpp': tool_root / '3gxtool/extern/yaml-cpp',
                    'dynalo': tool_root / '3gxtool/extern/dynalo'}
     for name, path in directories.items():
@@ -132,6 +133,21 @@ def build_tools(work, jobs):
     makefile.write_bytes(makefile.read_bytes().replace(b'-Werror', b''))
     run(['make', '-j' + str(jobs)], cwd=ctru, env=environment)
     environment['CTRULIB'] = str(ctru)
+    auxiliary = {}
+    for name in ('citro3d', 'citro2d'):
+        directory = directories[name]
+        library = directory / ('lib/lib' + name + '.a')
+        run(['make', 'lib/lib' + name + '.a', '-j' + str(jobs)], cwd=directory, env=environment)
+        for header in sorted((directory / 'include').rglob('*')):
+            if not header.is_file():
+                continue
+            destination = ctru / 'include' / header.relative_to(directory / 'include')
+            if destination.exists() and destination.read_bytes() != header.read_bytes():
+                raise ValueError('Conflicting graphics library header: ' + str(destination))
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(header, destination)
+        shutil.copyfile(library, ctru / 'lib' / library.name)
+        auxiliary[name] = {'library': receipt(library), 'headers': source_files(directory / 'include')}
     makerom = directories['makerom'] / 'makerom'
     run(['make', 'deps', '-j' + str(jobs)], cwd=makerom, env=environment)
     run(['make', 'program', '-j' + str(jobs)], cwd=makerom, env=environment)
@@ -144,6 +160,7 @@ def build_tools(work, jobs):
                        'make': ['make', '--version'], 'cmake': ['cmake', '--version']}.items():
         versions[name] = subprocess.check_output([str(arg) for arg in args], env=environment, text=True).splitlines()[0]
     record(work / 'toolchain.json', {'image': config['image'], 'sources': config['sources'], 'versions': versions,
+                                    'auxiliary': auxiliary,
                                     'libctru_makefile': receipt(makefile), 'makerom': receipt(makerom / 'bin/makerom'),
                                     '3gxtool': receipt(gx / 'build/3gxtool')})
     return environment

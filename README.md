@@ -53,6 +53,16 @@ bash build.bat 1
 
 Windowsでは `build.bat 1` で実行できます。成果物は `3DS/` に生成されます。libctruは初回に固定バージョンを取得してビルドするため、ネット接続が必要です。
 
+録画用ファイルは [.github/workflows/recorder.yml](.github/workflows/recorder.yml) の固定環境で次を実行します。作業先と統合先には、それぞれ別の空ディレクトリを指定します。
+
+```sh
+python3 tools/recorder.py prepare --work /tmp/yu-recorder
+python3 tools/recorder.py build --work /tmp/yu-recorder
+python3 tools/recorder.py merge --firmware 3DS --runtime /tmp/yu-recorder/runtime --destination /tmp/luma136-package
+```
+
+SDカードへ配布する全ファイルは `/tmp/luma136-package/` に生成されます。
+
 使用する[libctru](https://github.com/devkitPro/libctru)はv2.7.1（`62b7c42c88b1ee837f513358409d2e5c8f9001a9`）です。その他のツールの固定版と検証手順は [.github/workflows/build.yml](.github/workflows/build.yml) にあります。
 
 makeromは[固定コミット](https://github.com/3DSGuy/Project_CTR/tree/e8f5f529c54ff9b22a2491a480ffa69206bf7b19)を取得し、`python3 tools/patch_makerom.py <Project_CTR>/makerom/src/code.c` を適用してからビルド・配置してください。CIも同じ手順で準備します。
