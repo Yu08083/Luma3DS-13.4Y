@@ -1,0 +1,19 @@
+diff --git a/sysmod/source/main.c b/sysmod/source/main.c
+--- a/sysmod/source/main.c
++++ b/sysmod/source/main.c
+@@ -443,12 +443,12 @@ static void LedPattern(const u8 *r, const u8 *g, const u8 *b, u8 delay, u8 smoothing,
+ {
+     if (R_FAILED(g_mcuRc))
+         return;
+-    InfoLedPattern p;
++    MCU_InfoLedPattern p;
+     memset(&p, 0, sizeof(p));
+-    p.delay = delay;
+-    p.smoothing = smoothing;
+-    p.loopDelay = loopDelay;
++    p.animation.ticksPerFrame = delay;
++    p.animation.frameTransitionDelay = smoothing;
++    p.animation.numLastFrameRepeats = loopDelay;
+     memcpy(p.redPattern, r, 32);
+     memcpy(p.greenPattern, g, 32);
+     memcpy(p.bluePattern, b, 32);
