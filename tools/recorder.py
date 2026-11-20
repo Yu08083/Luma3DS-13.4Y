@@ -164,11 +164,14 @@ def host_tests(work, compiler=None):
     environment = dict(os.environ)
     if compiler:
         environment['CC'] = compiler
-    run(['make', 'test', '-j2'], cwd=tests, env=environment)
+    host_compiler = environment.get('CC', 'cc')
+    run(['make', 'test', '-j2', 'CC=' + host_compiler + ' -D_POSIX_C_SOURCE=200809L'], cwd=tests, env=environment)
     binaries = {name: receipt(tests / name) for name in ('test_bench', 'test_convert', 'test_codec',
                 'test_audio', 'test_huff', 'test_fused', 'test_unwrap', 'test_autostart', 'test_front',
                 'test_plgring', 'test_appletguard', 'test_join')}
-    record(work / 'host-tests.json', {'all_passed': True, 'suites': 12, 'binaries': binaries})
+    record(work / 'host-tests.json', {'all_passed': True, 'suites': 12,
+                                    'compiler': host_compiler, 'feature_macros': ['_POSIX_C_SOURCE=200809L'],
+                                    'binaries': binaries})
 
 
 def read32(data, offset):
