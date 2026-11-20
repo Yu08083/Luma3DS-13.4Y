@@ -8,7 +8,7 @@
   "patches": [
     {"path": "third_party/recorder/control.patch", "sha256": "a5ccc9d67aa57134b53c58316e6641491f2edf84155e70cd6948105257eacf42"},
     {"path": "third_party/recorder/host-tests.patch", "sha256": "60dc8ca03063532121fad79eeccf9ce79b22810c84b082120c995f822d56c06b"},
-    {"path": "third_party/recorder/sdk.patch", "sha256": "4cf002b28a13340f8be64041348a51809a38bb2d1feb1dfdc322f12821066cab"}
+    {"path": "third_party/recorder/sdk.patch", "sha256": "ee4cb4c8f34fe5628a80fbe322c0730cc4a2e96e5a480bb7ed417901436b3ecf"}
   ],
   "sources": {
     "recorder": {

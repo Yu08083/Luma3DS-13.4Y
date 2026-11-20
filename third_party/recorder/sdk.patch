@@ -17,3 +17,4 @@ diff --git a/sysmod/source/main.c b/sysmod/source/main.c
      memcpy(p.redPattern, r, 32);
      memcpy(p.greenPattern, g, 32);
      memcpy(p.bluePattern, b, 32);
+     MCUHWC_SetInfoLedPattern(&p);
