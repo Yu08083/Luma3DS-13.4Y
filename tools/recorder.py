@@ -125,6 +125,15 @@ def build_tools(work, jobs):
                    'dynalo': tool_root / '3gxtool/extern/dynalo'}
     for name, path in directories.items():
         fetch_source(config['sources'][name], path, work / 'cache')
+    dependency_patches = []
+    for name, patches in config.get('dependency_patches', {}).items():
+        for item in patches:
+            patch = ROOT / item['path']
+            if digest(patch.read_bytes()) != item['sha256']:
+                raise ValueError('Unexpected recorder dependency patch: ' + str(patch))
+            run(['git', 'apply', '--check', patch], cwd=directories[name])
+            run(['git', 'apply', patch], cwd=directories[name])
+            dependency_patches.append({'dependency': name, 'path': item['path'], **receipt(patch)})
     environment = dict(os.environ)
     compiler = Path(environment['DEVKITARM']) / 'bin/arm-none-eabi-gcc'
     environment['PATH'] = str(compiler.parent) + os.pathsep + environment['PATH']
@@ -160,7 +169,7 @@ def build_tools(work, jobs):
                        'make': ['make', '--version'], 'cmake': ['cmake', '--version']}.items():
         versions[name] = subprocess.check_output([str(arg) for arg in args], env=environment, text=True).splitlines()[0]
     record(work / 'toolchain.json', {'image': config['image'], 'sources': config['sources'], 'versions': versions,
-                                    'auxiliary': auxiliary,
+                                    'auxiliary': auxiliary, 'dependency_patches': dependency_patches,
                                     'libctru_makefile': receipt(makefile), 'makerom': receipt(makerom / 'bin/makerom'),
                                     '3gxtool': receipt(gx / 'build/3gxtool')})
     return environment

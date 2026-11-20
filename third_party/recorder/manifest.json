@@ -10,6 +10,11 @@
     {"path": "third_party/recorder/host-tests.patch", "sha256": "60dc8ca03063532121fad79eeccf9ce79b22810c84b082120c995f822d56c06b"},
     {"path": "third_party/recorder/sdk.patch", "sha256": "ee4cb4c8f34fe5628a80fbe322c0730cc4a2e96e5a480bb7ed417901436b3ecf"}
   ],
+  "dependency_patches": {
+    "citro2d": [
+      {"path": "third_party/recorder/citro2d.patch", "sha256": "c6079cfc7720ed25acdf7df854eaa0f43e4b85321dbbc31b67c47cc8925f0bec"}
+    ]
+  },
   "sources": {
     "recorder": {
       "commit": "7e2be022297fa0840409ccbd71539a0d5d71d88a",

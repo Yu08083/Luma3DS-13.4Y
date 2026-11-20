@@ -48,4 +48,11 @@ jobs:
             /tmp/yu-recorder/host-tests.json
             /tmp/yu-recorder/runtime.json
             /tmp/yu-recorder/packaging-tests.json
+            /tmp/yu-recorder/source/sysmod/rec3ds.cxi
+            /tmp/yu-recorder/source/sysmod/rec3ds.elf
+            /tmp/yu-recorder/source/sysmod/rec3ds.map
+            /tmp/yu-recorder/source/plugin/rec3ds-launch.3gx
+            /tmp/yu-recorder/source/plugin/build/rec3ds-launch.elf
+            /tmp/yu-recorder/source/app/3ds-recorder.elf
+            /tmp/yu-recorder/source/app/3ds-recorder.map
           if-no-files-found: warn

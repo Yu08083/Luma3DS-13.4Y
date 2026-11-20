@@ -1,0 +1,20 @@
+--- a/source/base.c
++++ b/source/base.c
+@@ -303,7 +303,7 @@
+ {
+ 	C2Di_Context* ctx = C2Di_GetContext();
+ 	if (!(ctx->flags & C2DiF_Active))
+-		return false;
++		return;
+ 
+ 	ctx->flags |= C2DiF_DirtyFade;
+ 	ctx->fadeClr = color;
+@@ -313,7 +313,7 @@
+ {
+ 	C2Di_Context* ctx = C2Di_GetContext();
+ 	if (!(ctx->flags & C2DiF_Active))
+-		return false;
++		return;
+ 
+ 	u32 new_mode;
+ 	switch (mode)
