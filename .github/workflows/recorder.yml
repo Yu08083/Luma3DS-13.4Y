@@ -1,6 +1,12 @@
 name: Build external recorder
 
 on:
+  push:
+    branches: [codex/luma-13-6y]
+    paths:
+      - '.github/workflows/recorder.yml'
+      - 'tools/recorder*.py'
+      - 'third_party/recorder/**'
   workflow_dispatch:
 
 permissions:

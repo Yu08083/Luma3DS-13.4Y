@@ -146,9 +146,10 @@ printf("{\"checks\":%u,\"variants\":%u}\n",checks,variants);return 0;
     fixed='void PluginLoader__UpdateMenu(void){static const char *status[]={"Plugin Loader: [Disabled]","Plugin Loader: [Enabled]"};rosalinaMenu.items[4].title=status[PluginLoaderCtx.isEnabled];}'
     negative=build_run(fixed,'fixed-index-mutant')
     assert negative.returncode!=0,'Hardcoded index4 unexpectedly survived menu reorder tests'
-    prior=fixed.replace('items[4]','items[3]')
+    prior='void PluginLoader__UpdateMenu(void){for(u32 i=0;i<menuCountItems(&rosalinaMenu);++i)if(rosalinaMenu.items[i].action_type==METHOD&&rosalinaMenu.items[i].method==RosalinaMenu_Cheats)rosalinaMenu.items[i].title="Plugin Loader: [Enabled]";}'
+    prior=prior.replace('menuCountItems(&rosalinaMenu)','32')
     prior_case=harness.replace('int main(void){','int regressions_main(void){',1)+r'''
-int main(void){PluginLoaderCtx.isEnabled=true;PluginLoader__UpdateMenu();CHECK(!strcmp(rosalinaMenu.items[3].title,"Plugin Loader: [Enabled]"));CHECK(rosalinaMenu.items[3].method==RosalinaMenu_Cheats);u32 before=cheatInvocations,saved=saves;rosalinaMenu.items[3].method();CHECK(cheatInvocations==before+1&&saves==saved&&PluginLoaderCtx.isEnabled);CHECK(pluginIndex()!=3);return 0;}
+int main(void){u32 target=UINT32_MAX;for(u32 i=0;i<menuCountItems(&rosalinaMenu);++i)if(rosalinaMenu.items[i].action_type==METHOD&&rosalinaMenu.items[i].method==RosalinaMenu_Cheats)target=i;CHECK(target!=UINT32_MAX);PluginLoaderCtx.isEnabled=true;PluginLoader__UpdateMenu();CHECK(!strcmp(rosalinaMenu.items[target].title,"Plugin Loader: [Enabled]"));CHECK(rosalinaMenu.items[target].method==RosalinaMenu_Cheats);u32 before=cheatInvocations,saved=saves;rosalinaMenu.items[target].method();CHECK(cheatInvocations==before+1&&saves==saved&&PluginLoaderCtx.isEnabled);CHECK(pluginIndex()!=target);return 0;}
 '''
     prior_result=build_run(prior,'old-label-callback-mismatch',prior_case)
     assert prior_result.returncode==0,prior_result.stdout+prior_result.stderr
@@ -161,7 +162,7 @@ int main(void){PluginLoaderCtx.isEnabled=true;PluginLoader__UpdateMenu();CHECK(!
     except ImportError:
         pass
     paths=[menu_path,loader_path,navigation_path,draw_path,language_path,ROS/'source/text.c',Path(__file__)]
-    report={'result':'pass',**counts,'fixed_index4_negative_control_rejected':True,'old_index3_label_callback_mismatch_reproduced':True,'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},'boundary':'Actual main menu initializer, plugin update/callback, visibility/navigation helpers, UTF8 measurement/translation and menu-row rasterizer. Other menu callbacks and hardware visibility services are stubs.','snapshots':snapshots,'hardware_tested':False}
+    report={'result':'pass',**counts,'fixed_index4_negative_control_rejected':True,'label_callback_mismatch_reproduced':True,'source_sha256':{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},'boundary':'Actual main menu initializer, plugin update/callback, visibility/navigation helpers, UTF8 measurement/translation and menu-row rasterizer. Other menu callbacks and hardware visibility services are stubs.','snapshots':snapshots,'hardware_tested':False}
     (OUT/'proof.json').write_bytes((json.dumps(report,indent=2)+'\n').encode())
     print(json.dumps(report))
 
