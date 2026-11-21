@@ -159,6 +159,10 @@ $(OUTPUT).cxi	:	$(OUTPUT).elf $(OUTPUT).rsf
 	@makerom -f ncch -rsf $(word 2,$^) -nocodepadding -o $@ -elf $<
 	@echo built ... $(notdir $@)
 
+ifneq ($(BUILD_FOR_GDB),1)
+launch.o termination.o reslimit.o service_manager.o: CFLAGS += -Oz
+endif
+
 $(OUTPUT).elf	:	$(OFILES)
 
 %.elf: $(OFILES)
