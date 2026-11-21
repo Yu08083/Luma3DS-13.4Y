@@ -28,6 +28,10 @@ jobs:
         run: python3 tools/recorder.py prepare --work /tmp/yu-recorder
       - name: Check runtime packaging
         run: python3 tools/recorder_tests.py --output /tmp/yu-recorder/packaging-tests.json
+      - name: Check recording stop with busy workers
+        run: python3 tests/recorder_quiesce.py /tmp/yu-recorder/source/sysmod/source/main.c
+      - name: Check game plugin coexistence
+        run: python3 tests/recorder_coexist.py /tmp/yu-recorder/source/sysmod/source/main.c
       - name: Build recorder and companion
         run: python3 tools/recorder.py build --work /tmp/yu-recorder
       - name: Recorder runtime

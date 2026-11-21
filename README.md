@@ -1,6 +1,6 @@
 # Luma3DS v13.6Y
 
-Luma3DS v13.5 を基にした改変版です。日本語・English対応。改修作者: `@yu_`。ver.y22。更新日: 2026-11-21。
+Luma3DS v13.5 を基にした改変版です。日本語・English対応。改修作者: `@yu_`。ver.y23。更新日: 2026-11-21。
 
 Rosalinaの `SD録画...` から、音声付きの画面録画を開始・停止できます。録画処理はSD上の外部モジュールで動作します。
 
@@ -16,13 +16,13 @@ New 3DSでは送信待ちの遅れを小さく補正し、圧縮処理の負荷�
 
 [リリース](https://github.com/Yu08083/Luma3DS-13.4Y/releases/latest)の `Luma3DS-v13.6Y.zip` を展開し、中身をSDカードのルートへコピーします。設定・録画データは含みません。`boot.firm` と切替用の `3ds/luma/9.1/boot.firm`、`3ds/luma/13.6/boot.firm`、旧版との互換用コピーが入ります。
 
-SD録画の初回導入ではZIPの全ファイルをコピーしてください。更新用CIAだけでは録画モジュールを導入できません。電源投入時にSELECTを押し、外部FIRM・モジュールの読み込みを有効にしてSTARTで保存します。
+Yu_ Installer ver.y19以降では、Lumaタブの「更新を確認」からLumaとSD録画を一緒に導入できます。初回は電源投入時にSELECTを押し、外部FIRM・モジュールの読み込みを有効にしてSTARTで保存します。
 
 - `SD録画...` のAで録画開始・停止、Yで録画モジュールを終了します。初期状態では起動していません。
 - 録画モジュールが応答しない場合も、BでRosalinaに戻れます。
 - 保存先は `3ds/recorder/recordings/` です。Homebrew Launcherで同梱の `Yu_Recorder.3dsx`（表示名 `3DS Recorder`）を開くと、録画一覧・MP4変換・録画設定を利用できます。補助アプリはEnglish・Українська対応です。
 - Yu_ キャプチャとの同時使用は避けてください。Rosalinaからは相互に開始を止めます。録画アプリやホットキーからの操作は上流の仕様です。
-- Oldの拡張メモリ用ゲームでは補助3GXを使うため、その起動時に別の3GXと併用できない場合があります。DS・GBAモードは録画できません。
+- Oldの拡張メモリ用ゲームでは、ゲーム用3GXがあるときはそちらを優先します。ゲーム起動後にRosalinaの「SD録画」でAを押すと、空きメモリが足りる場合に録画を開始できます。DS・GBAモードは録画できません。
 
 [本家v13.5配布版](https://github.com/LumaTeam/Luma3DS/releases/tag/v13.5)の[Homebrew Menu](https://github.com/devkitPro/3ds-hbmenu)（`boot.3dsx`）と `config/ssl/cacert.pem` も同梱しています。
 

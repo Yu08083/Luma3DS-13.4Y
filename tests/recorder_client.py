@@ -74,8 +74,9 @@ static Frame frames[128];
 static unsigned frame_count,lock_depth,key_count,key_index;
 static u32 keys[128];
 static bool port_open,streaming,live_handles[1024],override_header;
-static unsigned handle_cursor,connect_count,close_count,send_count,launch_count,sleep_count,system_info_count;
-static unsigned command_count,commands[128],status_count,open_after_sleep;
+static unsigned handle_cursor,connect_count,close_count,send_count,launch_count,system_info_count;
+static unsigned command_count,commands[128],status_count;
+static bool delay_port,delay_command;
 static Result connect_result,send_result,status_result,command_result,system_result,launch_result;
 static u32 reply_header,reply_magic,reply_version,rec_state,last_error,seconds,files,launch_state;
 static s64 system_options;
@@ -209,7 +210,7 @@ static Result svcSendSyncRequest(Handle handle)
         CHECK(request==YU_REC_COMMAND_REQUEST&&command_count<128);
         u32 action=ipc[1];commands[command_count++]=action;ipc[0]=override_header?reply_header:YU_REC_COMMAND_REPLY;
         ipc[1]=(u32)command_result;
-        if(R_SUCCEEDED(command_result))
+        if(R_SUCCEEDED(command_result) && !delay_command)
         {
             if(action==YU_REC_CMD_START)rec_state=YU_REC_RECORDING;
             else if(action==YU_REC_CMD_STOP)rec_state=YU_REC_IDLE;
@@ -228,14 +229,8 @@ static Result PMAPP_LaunchTitle(const FS_ProgramInfo *program,u32 flags)
     CHECK(!lock_depth&&program->programId==YU_REC_TITLE_ID&&program->mediaType==MEDIATYPE_NAND&&!flags);
     ++launch_count;
     CHECK(!in_menu||on_worker);stall_at(LAUNCH_STALL);
-    if(R_SUCCEEDED(launch_result)&&!open_after_sleep){port_open=true;rec_state=launch_state;}
+    if(R_SUCCEEDED(launch_result)&&!delay_port){port_open=true;rec_state=launch_state;}
     return launch_result;
-}
-static Result svcSleepThread(s64 duration)
-{
-    CHECK(!lock_depth&&duration==50000000LL);++sleep_count;
-    if(open_after_sleep&&sleep_count==open_after_sleep){port_open=true;rec_state=launch_state;}
-    return 0;
 }
 static bool RemotePlay_IsRunning(void) { CHECK(!lock_depth);return streaming; }
 '''
@@ -248,8 +243,8 @@ static void reset(bool active)
     CHECK(!lock_depth);memset(frames,0,sizeof(frames));memset(keys,0,sizeof(keys));memset(ipc,0,sizeof(ipc));
     frame_count=key_index=0;key_count=6;keys[5]=KEY_B;port_open=active;streaming=false;menuShouldExit=false;
     creates=joins=0;create_result=0;stall=NO_STALL;
-    handle_cursor=connect_count=close_count=send_count=launch_count=sleep_count=system_info_count=0;
-    command_count=status_count=open_after_sleep=0;connect_result=send_result=status_result=command_result=system_result=launch_result=0;
+    handle_cursor=connect_count=close_count=send_count=launch_count=system_info_count=0;
+    command_count=status_count=0;delay_port=delay_command=false;connect_result=send_result=status_result=command_result=system_result=launch_result=0;
     reply_header=0;override_header=false;reply_magic=YU_REC_MAGIC;reply_version=YU_REC_PROTOCOL_VERSION;rec_state=launch_state=YU_REC_IDLE;last_error=0;seconds=42;files=7;
     system_options=2;g_language=LANG_EN;wait_hook=NULL;++case_count;
 }
@@ -272,6 +267,9 @@ static unsigned find_frame(const char *message)
 }
 static bool shown(const char *message){return find_frame(message)<frame_count;}
 static void leave_system_menu(unsigned index) { if(index==1)menuShouldExit=true; }
+static void late_port(unsigned index) { if(index==6) {port_open=true;rec_state=YU_REC_IDLE;} }
+static void slow_boot(unsigned index) { if(index==75)rec_state=YU_REC_IDLE; }
+static void expire_boot(unsigned index) { if(index==7)elapsed_ms+=121000; }
 static void end_menu_case(void)
 {
     if(active_thread)
@@ -349,14 +347,21 @@ int main(void)
         end_menu_case();no_live_handles();
     }
     reset(false);system_result=-105;input(KEY_A);menu();CHECK(!launch_count&&!command_count);end_menu_case();no_live_handles();
-    reset(false);launch_result=-106;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&sleep_count==0);end_menu_case();no_live_handles();
-    reset(false);open_after_sleep=1000;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&sleep_count==60);end_menu_case();no_live_handles();
-    reset(false);open_after_sleep=3;input(KEY_A);menu();CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START&&sleep_count==3);end_menu_case();no_live_handles();
-    reset(false);launch_state=YU_REC_REPLAY;input(KEY_A);menu();CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START&&rec_state==YU_REC_RECORDING&&!sleep_count);end_menu_case();no_live_handles();
-    reset(false);launch_state=YU_REC_RECORDING;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&rec_state==YU_REC_RECORDING&&!sleep_count);end_menu_case();no_live_handles();
-    reset(false);launch_state=YU_REC_ERROR;last_error=0xC920181A;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&!sleep_count&&shown("0xc920181a"));end_menu_case();no_live_handles();
-    reset(false);launch_state=YU_REC_ERROR;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&!sleep_count&&shown("0xd8a3fbf5"));end_menu_case();no_live_handles();
-    reset(false);launch_state=YU_REC_ERROR;last_error=1;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&!sleep_count&&shown("0xd8a3fbf5"));end_menu_case();no_live_handles();
+    reset(false);launch_result=-106;input(KEY_A);menu();CHECK(launch_count==1&&!command_count);end_menu_case();no_live_handles();
+    reset(false);delay_port=true;wait_hook=expire_boot;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&shown("not responding"));end_menu_case();no_live_handles();
+    reset(false);delay_port=true;wait_hook=late_port;input(KEY_A);keys[12]=0;key_count=20;keys[19]=KEY_B;menu();CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START);end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_REPLAY;input(KEY_A);menu();CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START&&rec_state==YU_REC_RECORDING);end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_RECORDING;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&rec_state==YU_REC_RECORDING);end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_ERROR;last_error=0xC920181A;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&shown("0xc920181a"));end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_ERROR;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&shown("0xd8a3fbf5"));end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_ERROR;last_error=1;input(KEY_A);menu();CHECK(launch_count==1&&!command_count&&shown("0xd8a3fbf5"));end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_STARTING;wait_hook=slow_boot;input(KEY_A);keys[12]=0;key_count=94;keys[93]=KEY_B;menu();
+    CHECK(launch_count==1&&command_count==1&&commands[0]==YU_REC_CMD_START&&shown("Starting...")&&!shown("not responding"));end_menu_case();no_live_handles();
+    reset(false);launch_state=YU_REC_STARTING;input(KEY_A);menu();CHECK(launch_count==1&&!command_count);end_menu_case();no_live_handles();
+    for(unsigned s=0;s<2;s++) {
+        reset(true);rec_state=s?YU_REC_RECORDING:YU_REC_IDLE;delay_command=true;input(KEY_A);keys[10]=KEY_A;keys[12]=0;key_count=22;keys[16]=KEY_A;keys[21]=KEY_B;menu();
+        CHECK(command_count==1&&commands[0]==(s?YU_REC_CMD_STOP:YU_REC_CMD_START));end_menu_case();no_live_handles();
+    }
     reset(true);reply_version++;input(KEY_A);menu();CHECK(!launch_count&&!command_count&&shown("0x"));end_menu_case();no_live_handles();
     reset(true);reply_magic^=1;input(KEY_A);menu();CHECK(!launch_count&&!command_count&&shown("0x"));end_menu_case();no_live_handles();
     reset(true);send_result=(Result)0xC920181A;menu();CHECK(shown("0xc920181a")&&!command_count&&!launch_count);end_menu_case();no_live_handles();
@@ -369,8 +374,11 @@ int main(void)
     reset(true);command_result=(Result)YU_REC_ERROR_STATE;input(KEY_A);menu();CHECK(command_count==1&&rec_state==YU_REC_IDLE&&shown("0xd8a3fbf5"));end_menu_case();no_live_handles();
     for(unsigned state=YU_REC_STARTING;state<=YU_REC_REPLAY;++state)
     {
-        reset(true);rec_state=state;seconds=files=UINT32_MAX;menu();
+        reset(true);rec_state=state;seconds=files=UINT32_MAX;
+        if(state!=YU_REC_IDLE&&state!=YU_REC_REPLAY&&state!=YU_REC_RECORDING)input(KEY_A);
+        menu();
         CHECK(!launch_count&&!command_count&&shown("4294967295"));end_menu_case();no_live_handles();
+        if(state!=YU_REC_IDLE&&state!=YU_REC_REPLAY&&state!=YU_REC_RECORDING)CHECK(!shown("A: record")&&!shown("A: stop"));
     }
     reset(false);create_result=-107;input(KEY_A);menu();
     CHECK(creates>0&&!active_thread&&!launch_count&&!command_count&&shown("0xffffff95"));end_menu_case();no_live_handles();

@@ -20,6 +20,14 @@ static const char *g_title = "Plugin loader";
 PluginLoaderContext PluginLoaderCtx;
 extern u32 g_blockMenuOpen;
 
+static bool IsOldRecorderOrder(const PluginLoadParameters *params)
+{
+    static const char launcher[] = "/3ds/recorder/rec3ds-launch.3gx";
+    return isN3DS && params->noFlash && !params->persistent && params->lowTitleId &&
+           params->pluginMemoryStrategy == PLG_STRATEGY_MODE3 &&
+           !memcmp(params->path, launcher, sizeof(launcher));
+}
+
 void        PluginLoader__Init(void)
 {
     PluginLoaderContext *ctx = &PluginLoaderCtx;
@@ -52,7 +60,7 @@ void        PluginLoader__Init(void)
         if (R_SUCCEEDED(IFile_Read(&file, &temp_read, &magic, sizeof(magic))) && temp_read == sizeof(magic) && magic == PERS_USER_FILE_MAGIC
             && R_SUCCEEDED(IFile_Read(&file, &temp_read, params, sizeof(PluginLoadParameters))) && temp_read == sizeof(PluginLoadParameters))
         {
-            ctx->useUserLoadParameters = true;
+            ctx->useUserLoadParameters = !IsOldRecorderOrder(params);
         }
         else
         {

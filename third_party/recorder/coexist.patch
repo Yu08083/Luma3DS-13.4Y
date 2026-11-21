@@ -1,0 +1,208 @@
+diff --git a/sysmod/source/main.c b/sysmod/source/main.c
+index 0dd01b7..a15bf7f 100644
+--- a/sysmod/source/main.c
++++ b/sysmod/source/main.c
+@@ -3519,6 +3519,8 @@ static void UpdateBoost(void)
+ #define PLG_BY_US_FS    DIR_FS "/.plugin_loader_on"   /* the recorder turned the plugin loader on */
+ #define USER_PARAM_MAGIC 0x53524550u                    /* "PERS", Rosalina plgloader.c */
+ #define ORDER_RESUME     0x52455331u                    /* config[0]: a recording was running ("RES1") */
++#define ORDER_OWNER      0x52454359u
++#define ORDER_TMP_FS     DIR_FS "/.launcher-order.tmp"
+ 
+ /* Rosalina's PluginLoadParameters (sysmodules/rosalina/include/plugin/plgldr.h) */
+ typedef struct {
+@@ -3663,12 +3665,17 @@ static bool SdFileExists(const char *path)
+ static int ReadUserParam(u32 *tidLow, bool *resume)
+ {
+     Handle f = 0;
+-    if (R_FAILED(FSUSER_OpenFile(&f, g_sd, fsMakePath(PATH_ASCII, USER_PARAM_FS), FS_OPEN_READ, 0)))
+-        return 0;
++    Result rc = FSUSER_OpenFile(&f, g_sd, fsMakePath(PATH_ASCII, USER_PARAM_FS), FS_OPEN_READ, 0);
++    if (R_FAILED(rc))
++        return R_SUMMARY(rc) == RS_NOTFOUND ? 0 : -1;
+     struct { u32 magic; PluginLoadParams p; } buf;
+     u32 got = 0;
+-    const bool ok = R_SUCCEEDED(FSFILE_Read(f, &got, 0, &buf, sizeof(buf))) && got == sizeof(buf) &&
+-                    buf.magic == USER_PARAM_MAGIC && strcmp(buf.p.path, LAUNCH_3GX_FS) == 0;
++    u64 size = 0;
++    const bool ok = R_SUCCEEDED(FSFILE_GetSize(f, &size)) && size == sizeof(buf) &&
++                    R_SUCCEEDED(FSFILE_Read(f, &got, 0, &buf, sizeof(buf))) && got == sizeof(buf) &&
++                    buf.magic == USER_PARAM_MAGIC && buf.p.noFlash == 1 && buf.p.lowTitleId &&
++                    buf.p.memoryStrategy == 1 && !buf.p.persistent &&
++                    !memcmp(buf.p.path, LAUNCH_3GX_FS, sizeof(LAUNCH_3GX_FS));
+     FSFILE_Close(f);
+     if (ok && tidLow)
+         *tidLow = buf.p.lowTitleId;
+@@ -3677,6 +3684,44 @@ static int ReadUserParam(u32 *tidLow, bool *resume)
+     return ok ? 1 : -1;
+ }
+ 
++static bool GameHasPlugin(u64 tid)
++{
++    Handle file = 0, dir = 0;
++    Result rc = FSUSER_OpenFile(&file, g_sd, fsMakePath(PATH_ASCII, "/luma/plugins/default.3gx"), FS_OPEN_READ, 0);
++    if (R_SUCCEEDED(rc))
++    {
++        FSFILE_Close(file);
++        return true;
++    }
++    if (R_SUMMARY(rc) != RS_NOTFOUND)
++        return true;
++    char path[48];
++    snprintf(path, sizeof(path), "/luma/plugins/%016llX", (unsigned long long)tid);
++    rc = FSUSER_OpenDirectory(&dir, g_sd, fsMakePath(PATH_ASCII, path));
++    if (R_FAILED(rc))
++        return R_SUMMARY(rc) != RS_NOTFOUND;
++    FS_DirectoryEntry entry;
++    u32 count = 0;
++    bool found = false;
++    unsigned scanned = 0;
++    while (scanned < 32 && R_SUCCEEDED(rc = FSDIR_Read(dir, &count, 1, &entry)) && count)
++    {
++        ++scanned;
++        if ((entry.attributes & FS_ATTRIBUTE_DIRECTORY) || entry.name[0] == '.')
++            continue;
++        size_t n = 0;
++        while (n < sizeof(entry.name) / sizeof(entry.name[0]) && entry.name[n]) ++n;
++        if (n > 4 && entry.name[n-4] == '.' && entry.name[n-3] == '3' &&
++            (entry.name[n-2] == 'g' || entry.name[n-2] == 'G') && (entry.name[n-1] == 'x' || entry.name[n-1] == 'X'))
++        {
++            found = true;
++            break;
++        }
++    }
++    FSDIR_Close(dir);
++    return found || R_FAILED(rc) || scanned == 32;
++}
++
+ /* At start: in which memory mode, whether the launcher plugin started us; removes our order.
+    True: a recording ran when the game rebooted the console, so it goes on. */
+ static bool AfterReboot(void)
+@@ -3685,6 +3730,12 @@ static bool AfterReboot(void)
+     u32 tidLow = 0;
+     bool resume = false;
+     const int order = ReadUserParam(&tidLow, &resume);
++    if (g_isNew3ds)
++    {
++        if (order > 0) FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, USER_PARAM_FS));
++        FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, PLG_BY_US_FS));
++        return false;
++    }
+     /* started with the console: the game and its plugin come later, AfterPluginUp cleans up
+        (EarlyLoader has already taken back an order for a game in the no-plugin list) */
+     const bool keep = g_bootStart && mode != 0 && mode < 6 && order > 0;
+@@ -3692,7 +3743,8 @@ static bool AfterReboot(void)
+     g_plgTid = order > 0 && mode != 0 && mode < 6 ? tidLow : 0;
+     if (order > 0 && !keep)
+         FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, USER_PARAM_FS));
+-    const bool weTurnedOn = !keep && SdFileExists(PLG_BY_US_FS);
++    const bool weTurnedOn = !keep && order > 0 && SdFileExists(PLG_BY_US_FS);
++    if (!keep && order <= 0) FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, PLG_BY_US_FS));
+     if (weTurnedOn && PluginLoader(0) == 0)   /* the record goes only once the loader is off */
+         FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, PLG_BY_US_FS));
+     Log("memory mode %lu (%s): APPLICATION %lu KB, SYSTEM free %lu KB of %lu KB, BASE free %lu KB; launcher order %s%s",
+@@ -3703,7 +3755,7 @@ static bool AfterReboot(void)
+     if (order > 0)
+         Log("launcher order was for title %08lX%s", tidLow, resume ? ": the recording goes on in 2 s" : "");
+     /* only right after that game's reboot (an old order must not start a recording in another one) */
+-    resume = resume && order > 0 && mode != 0;
++    resume = resume && g_plgTid != 0;
+     if (resume)   /* the recording that game's start stopped goes on: nothing to explain in the app */
+         FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, STOPPED_FS));
+     return resume;
+@@ -3766,9 +3818,9 @@ static void WriteGameOrder(bool wasRecording)
+         g_order.skip = "no launcher plugin " LAUNCH_3GX_FS;
+         return;
+     }
+-    if (ReadUserParam(NULL, NULL) < 0)
++    if (ReadUserParam(NULL, NULL) != 0 || GameHasPlugin(g_order.tid))
+     {
+-        g_order.skip = USER_PARAM_FS " belongs to another program";
++        g_order.skip = "game plugin or pending loader order";
+         return;
+     }
+     struct { u32 magic; PluginLoadParams p; } buf;
+@@ -3782,19 +3834,27 @@ static void WriteGameOrder(bool wasRecording)
+     buf.p.persistent = 0;
+     buf.p.lowTitleId = (u32)g_order.tid;
+     buf.p.config[0] = wasRecording ? ORDER_RESUME : 0;
++    buf.p.config[1] = ORDER_OWNER;
++    buf.p.config[2] = buf.p.lowTitleId;
+     snprintf(buf.p.path, sizeof(buf.p.path), "%s", LAUNCH_3GX_FS);
+     FSUSER_CreateDirectory(g_sd, fsMakePath(PATH_ASCII, "/luma/plugins"), 0);
+-    const FS_Path p = fsMakePath(PATH_ASCII, USER_PARAM_FS);
++    const FS_Path p = fsMakePath(PATH_ASCII, ORDER_TMP_FS);
+     FSUSER_DeleteFile(g_sd, p);
+     Handle f = 0;
+     g_order.rc = FSUSER_OpenFile(&f, g_sd, p, FS_OPEN_WRITE | FS_OPEN_CREATE, 0);
+     if (R_SUCCEEDED(g_order.rc))
+     {
+         g_order.rc = FSFILE_Write(f, &g_order.done, 0, &buf, sizeof(buf), FS_WRITE_FLUSH);
+-        FSFILE_Close(f);
++        const Result closed = FSFILE_Close(f);
++        if (R_SUCCEEDED(g_order.rc)) g_order.rc = closed;
+     }
++    if (R_SUCCEEDED(g_order.rc) && g_order.done == sizeof(buf))
++        g_order.rc = FSUSER_RenameFile(g_sd, p, g_sd, fsMakePath(PATH_ASCII, USER_PARAM_FS));
+     if (R_FAILED(g_order.rc) || g_order.done != sizeof(buf))
++    {
++        FSUSER_DeleteFile(g_sd, p);
+         g_order.skip = "writing failed";
++    }
+ }
+ 
+ /* After the recording is saved: the log line, and the plugin loader on if it is off. */
+@@ -4324,9 +4384,9 @@ static void EarlyLoader(void)
+     const u32 mode = OS_KernelConfig->app_memtype;
+     u32 tidLow = 0;
+     bool resume = false;
+-    if (!g_bootStart || !g_sd || mode == 0 || mode >= 6 || ReadUserParam(&tidLow, &resume) <= 0)
++    if (g_isNew3ds || !g_bootStart || !g_sd || mode == 0 || mode >= 6 || ReadUserParam(&tidLow, &resume) <= 0)
+         return;
+-    if (NoPlugin(tidLow))   /* the game needs all of its memory: the order is taken back */
++    if (NoPlugin(tidLow) || GameHasPlugin(0x0004000000000000ull | tidLow))
+     {
+         u32 tries = 0;
+         bool ok = false;
+@@ -4367,7 +4427,8 @@ static void AfterPluginUp(const char *why)
+     const int order = ReadUserParam(NULL, NULL);
+     if (order > 0)
+         FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, USER_PARAM_FS));
+-    const bool weTurnedOn = SdFileExists(PLG_BY_US_FS);
++    const bool weTurnedOn = order > 0 && SdFileExists(PLG_BY_US_FS);
++    if (order <= 0) FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, PLG_BY_US_FS));
+     if (weTurnedOn && PluginLoader(0) == 0)   /* the record goes only once the loader is off */
+         FSUSER_DeleteFile(g_sd, fsMakePath(PATH_ASCII, PLG_BY_US_FS));
+     Log("launcher order %s (%s)%s", order > 0 ? "removed" : "already gone", why, weTurnedOn ? "; plugin loader turned off again" : "");
+@@ -4544,12 +4605,18 @@ static bool MapPluginMemory(void)
+     const u32 mode = OS_KernelConfig->app_memtype;
+     if (mode == 0 || mode >= 6 || (*(const volatile u32 *)0x1FF800F0 & 0xFFFFu) == 0)
+         return false;   /* not an extended-memory game on an Old 3DS, or no plugin in it */
+-    if (!g_plgTid)
++    if (g_isNew3ds || !g_plgTid)
+         return false;   /* a plugin of someone else's (no order of ours this start): its heap is its own */
+     const u32 pid = ApplicationPid();
+     Handle game = 0;
+     if (!pid || R_FAILED(svcOpenProcess(&game, pid)))
+         return false;
++    s64 gameTitle = 0;
++    if (R_FAILED(svcGetProcessInfo(&gameTitle, game, 0x10001)) || (u64)gameTitle != (0x0004000000000000ull | g_plgTid))
++    {
++        svcCloseHandle(game);
++        return false;
++    }
+     u32 magic = 0, heapVa = 0, heapSize = 0;
+     Result rc = svcMapProcessMemoryEx(CUR_PROCESS_HANDLE, PLG_HDR_VA, game, 0x07000000u, 0x1000u, 0);
+     if (R_SUCCEEDED(rc))
+@@ -4558,8 +4625,10 @@ static bool MapPluginMemory(void)
+         magic = h[0];
+         heapVa = h[2];
+         heapSize = h[3];
++        const volatile u32 *config = h + 0x80 / sizeof(*h);
++        const bool ownLauncher = config[1] == ORDER_OWNER && config[2] == g_plgTid;
+         svcUnmapProcessMemoryEx(CUR_PROCESS_HANDLE, PLG_HDR_VA, 0x1000u);
+-        if (magic != PLG_MAGIC || heapSize < MB || heapSize > 16u * MB || (heapVa & 0xFFFu))
++        if (!ownLauncher || magic != PLG_MAGIC || heapSize < MB || heapSize > 16u * MB || (heapVa & 0xFFFu))
+             rc = -1;
+         else
+             /* MAPEXFLAGS_PRIVATE: mapped like our own heap (0xBB05), so FS writes and DMA accept it */

@@ -1,0 +1,327 @@
+diff --git a/sysmod/source/main.c b/sysmod/source/main.c
+--- a/sysmod/source/main.c
++++ b/sysmod/source/main.c
+@@ -37,6 +37,7 @@
+ #include "front.h"
+ #include "plgring.h"
+ #include "appletguard.h"
++#include "capturegate.h"
+ 
+ /* Luma custom SVCs (csvc.s) */
+ Result svcControlMemoryUnsafe(u32 *out, u32 addr0, u32 size, MemOp op, MemPerm perm);
+@@ -1810,7 +1811,6 @@
+ } AudioItem;
+ 
+ static AudioItem   *volatile g_aq;         /* NULL: no audio in this recording */
+-static volatile bool g_convInAudio;        /* converter inside DrainAudio (stop handshake) */
+ static volatile u32 g_aqHead, g_aqTail;    /* main thread produces, converter consumes */
+ static u32          g_audioLast[2][AUDIO_FRAME];   /* last frame queued, per region */
+ static u32          g_audioCur[2][AUDIO_FRAME];
+@@ -2045,20 +2045,10 @@
+ }
+ 
+ /* Converter thread: queued audio frames and the periodic DSP snapshot into the ring. */
+-static void DrainAudioImpl(void);
+-
+ static void DrainAudio(void)
+ {
+-    g_convInAudio = true;
+-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+-    if (g_aq)
+-        DrainAudioImpl();
+-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+-    g_convInAudio = false;
+-}
+-
+-static void DrainAudioImpl(void)
+-{
++    if (!g_aq)
++        return;
+     while (g_aqTail != __atomic_load_n(&g_aqHead, __ATOMIC_ACQUIRE))
+     {
+         const AudioItem *it = &g_aq[g_aqTail % g_aqCap];
+@@ -2125,9 +2115,7 @@
+ static volatile u64 g_appSwapUs;   /* recording time of the last new FCRAM frame on the top screen */
+ static volatile bool g_appSwapSeen; /* g_appSwapUs is set (in this recording) */
+ 
+-/* Converter thread state for StopRecording: g_convHold makes it leave the slots alone; g_convInSlot
+-   is set while it handles one. */
+-static volatile bool g_convHold, g_convInSlot;
++static uint32_t g_captureGate = CAPTURE_GATE_CLOSED;
+ 
+ /* Main thread, every loop: every running DMA that finished gets its handle closed at once (each
+    holds one of the ARM11's few DMA channels until then); one that failed or took too long is
+@@ -2165,20 +2153,8 @@
+ /* One round of the converter: a wait, or one frame encoded. */
+ static void ConverterStep(void)
+ {
+-    if (g_convHold)
+-    {
+-        svcSleepThread(2 * 1000 * 1000);
+-        return;
+-    }
+     if (!PackerOn())
+         DrainAudio();
+-    g_convInSlot = true;
+-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+-    if (g_convHold)
+-    {
+-        g_convInSlot = false;
+-        return;
+-    }
+     Slot *next = NULL;
+     bool running = false;
+     for (u32 i = 0; i < 2 * MAX_SLOTS; i++)
+@@ -2204,7 +2180,6 @@
+                 if (g_hasFrame[sc] && now - g_storedUs[sc] >= REPLAY_KEY_US)
+                     StoreAgain(sc);
+         }
+-        g_convInSlot = false;
+         if (running)
+             svcSleepThread(300 * 1000);
+         else
+@@ -2214,7 +2189,6 @@
+     if (PackerOn() && g_stHead - g_stTail >= g_stageN)
+     {
+         /* every staging buffer full: wait for the packer (it leaves Huffman out meanwhile) */
+-        g_convInSlot = false;
+         g_convWaiting = true;
+         LightEvent_Signal(&g_packEvent);
+         svcSleepThread(1000 * 1000);
+@@ -2245,7 +2219,6 @@
+     g_encodeSlow[next->screen] += us > 1000000u / 30u;
+     g_encodeSumUs[next->screen] += us;
+     __atomic_store_n(&next->state, 0, __ATOMIC_RELEASE);
+-    g_convInSlot = false;
+     /* only on the system core, where HOME Menu needs it: on core 2 (New 3DS) it cost ~30% of the
+        converter's speed (5 ms frames), and on the game's core the converter is lowest anyway */
+     if (g_boosted && g_convCores[g_convActive] == 1)
+@@ -2272,8 +2245,13 @@
+             svcSleepThread(1000 * 1000);   /* the other thread finishes its round */
+             continue;
+         }
+-        if (g_convActive == id)
++        if (g_convActive == id && capture_gate_enter(&g_captureGate))
++        {
+             ConverterStep();
++            capture_gate_leave(&g_captureGate);
++        }
++        else
++            LightEvent_WaitTimeout(&g_convEvent, 20ull * 1000 * 1000);
+         __atomic_store_n(&g_convOwner, 0u, __ATOMIC_SEQ_CST);
+     }
+ }
+@@ -2289,18 +2267,25 @@
+             svcSleepThread(20 * 1000 * 1000);
+             continue;
+         }
+-        if (!PackerOn())
++        if (!capture_gate_enter(&g_captureGate))
+         {
+             LightEvent_WaitTimeout(&g_packEvent, 100ull * 1000 * 1000);
+             continue;
+         }
+-        DrainAudio();
+-        if (g_stTail != __atomic_load_n(&g_stHead, __ATOMIC_ACQUIRE))
+-        {
+-            PackStage();
+-            continue;
+-        }
+-        LightEvent_WaitTimeout(&g_packEvent, 10ull * 1000 * 1000);   /* audio comes every ~5 ms: 16 queued wake it */
++        const bool enabled = PackerOn();
++        bool packed = false;
++        if (enabled)
++        {
++            DrainAudio();
++            if (g_stTail != __atomic_load_n(&g_stHead, __ATOMIC_ACQUIRE))
++            {
++                PackStage();
++                packed = true;
++            }
++        }
++        capture_gate_leave(&g_captureGate);
++        if (!packed)
++            LightEvent_WaitTimeout(&g_packEvent, (enabled ? 10ull : 100ull) * 1000 * 1000);
+     }
+ }
+ 
+@@ -4965,7 +4950,6 @@
+     memset(g_drops, 0, sizeof(g_drops));
+     g_dropBurstCount = g_dropBurstsLost = 0;
+     g_dmaMaxRunning = 0;
+-    g_convHold = false;
+     memset(g_encodeMaxUs, 0, sizeof(g_encodeMaxUs));
+     memset(g_encodeSlow, 0, sizeof(g_encodeSlow));
+     memset(g_encodeSumUs, 0, sizeof(g_encodeSumUs));
+@@ -4994,6 +4978,9 @@
+     g_stageN = stages;   /* the packer takes over the ring (audio too) */
+     g_writerActive = true;
+     g_recording = true;
++    capture_gate_open(&g_captureGate);
++    LightEvent_Signal(&g_convEvent);
++    LightEvent_Signal(&g_packEvent);
+     g_shared.ringKb = g_ringSize / KB;
+     g_shared.sysFreeKb = osGetMemRegionFree(MEMREGION_SYSTEM) / KB;
+     g_shared.state = replay ? REC_STATE_REPLAY : REC_STATE_RECORDING;
+@@ -5254,24 +5241,30 @@
+     return ok;
+ }
+ 
+-/* The converter leaves the frame it is in. It used to be given 10 s, and the buffers were freed
+-   under it after that (a data abort in the module): on the game's core, at the lowest priority, a
+-   busy game can keep it out that long. Raised for the rest of that frame, then lowered again. */
+-static void ConvWaitOut(void)
+-{
+-    for (u32 i = 0; i < 400 && g_convInSlot; i++)
++static void QuiesceWorkers(void)
++{
++    capture_gate_close(&g_captureGate);
++    LightEvent_Signal(&g_convEvent);
++    LightEvent_Signal(&g_packEvent);
++    for (u32 i = 0; i < 400 && capture_gate_busy(&g_captureGate); i++)
+         svcSleepThread(5 * 1000 * 1000);
+-    if (!g_convInSlot)
+-        return;
+-    /* the thread inside the frame: after a probe's switch it is the one before g_convThread */
++    if (!capture_gate_busy(&g_captureGate))
++        return;
+     const u32 owner = __atomic_load_n(&g_convOwner, __ATOMIC_SEQ_CST);
+-    const Handle t = threadGetHandle(owner >= 1 && owner <= g_convCount ? g_convThreads[owner - 1] : g_convThread);
+-    svcSetThreadPriority(t, CONVERTER_PRIO_BOOST);
+-    for (u32 i = 0; i < 6000 && g_convInSlot; i++)
++    Handle handles[2] = {threadGetHandle(owner >= 1 && owner <= g_convCount ? g_convThreads[owner - 1] : g_convThread),
++                         threadGetHandle(g_packThread)};
++    s32 priorities[2] = {-1, -1};
++    for (unsigned i = 0; i < 2; ++i) {
++        s32 priority;
++        if (R_SUCCEEDED(svcGetThreadPriority(&priority, handles[i])) && priority > CONVERTER_PRIO_BOOST &&
++            R_SUCCEEDED(svcSetThreadPriority(handles[i], CONVERTER_PRIO_BOOST)))
++            priorities[i] = priority;
++    }
++    while (capture_gate_busy(&g_captureGate))
+         svcSleepThread(5 * 1000 * 1000);
+-    const bool sysCore = t == threadGetHandle(g_convThreads[0]) && g_convCores[0] == 1;
+-    svcSetThreadPriority(t, g_boosted && sysCore && t == threadGetHandle(g_convThread) ? CONVERTER_PRIO_BOOST : CONVERTER_PRIO);
+-    Log("stop: the converter took over 2 s to leave its frame%s", g_convInSlot ? ", still in it after 30 s more" : "");
++    for (unsigned i = 0; i < 2; ++i)
++        if (priorities[i] >= 0)
++            svcSetThreadPriority(handles[i], priorities[i]);
+ }
+ 
+ static void StopRecording(const char *why, bool releaseFirst)
+@@ -5300,14 +5293,23 @@
+         LightEvent_Signal(&g_packEvent);
+         svcSleepThread(5 * 1000 * 1000);
+     }
++    while (g_audioInPoll)
++        svcSleepThread(1 * 1000 * 1000);
++    for (u32 i = 0; i < (releaseFirst ? 0u : 100u) && g_aq && g_aqTail != g_aqHead; i++)
++    {
++        LightEvent_Signal(&g_convEvent);
++        LightEvent_Signal(&g_packEvent);
++        svcSleepThread(5 * 1000 * 1000);
++    }
++    QuiesceWorkers();
++    g_dropped += g_stHead - g_stTail;
++    g_stTail = g_stHead;
++    g_reserved = 0;
+     if (!SlotsIdle())
+     {
+         /* the converter is starved (the game's core busy): it leaves the slots alone from here, and
+            DMAs still running are stopped before their buffers are given back (they used to be freed
+            with the DMA still writing into them, the handles left open) */
+-        g_convHold = true;
+-        __atomic_thread_fence(__ATOMIC_SEQ_CST);
+-        ConvWaitOut();
+         u32 stopped = 0;
+         for (u32 i = 0; i < 2 * MAX_SLOTS; i++)
+         {
+@@ -5321,26 +5323,11 @@
+             }
+             sl->state = 0;
+         }
+-        Log("stop: converter starved, %lu DMAs stopped, slots cleared%s", stopped,
+-            g_convInSlot ? " (converter still inside a frame)" : "");
+-    }
+-    /* the replay buffer's converter may be storing a still screen's picture again (StoreAgain) */
+-    if (replay)
+-        ConvWaitOut();
+-    while (g_audioInPoll)   /* the audio thread sees g_recording == false from its next poll */
+-        svcSleepThread(1 * 1000 * 1000);
+-    for (u32 i = 0; i < (releaseFirst ? 0u : 100u) && g_aq && g_aqTail != g_aqHead; i++)   /* queued audio into the ring */
+-    {
+-        LightEvent_Signal(&g_convEvent);
+-        LightEvent_Signal(&g_packEvent);
+-        svcSleepThread(5 * 1000 * 1000);
++        Log("stop: %lu DMAs stopped", stopped);
+     }
+     void *const aq = g_aq;
+-    g_aq = NULL;   /* the converter stops touching the ring for audio ... */
++    g_aq = NULL;
+     g_audioReserve = false;
+-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+-    while (g_convInAudio)   /* ... once it leaves DrainAudio */
+-        svcSleepThread(1 * 1000 * 1000);
+     bool ringDropped = false;
+     u64 dropFrom = 0;
+     if (releaseFirst && SlotsIdle() && StagesIdle())
+@@ -5442,7 +5429,6 @@
+         g_ringMirror = false;
+         BigFreeAll();
+         g_appPid = g_appBase = 0;
+-        g_convHold = false;
+         g_shared.state = REC_STATE_IDLE;
+         return;
+     }
+@@ -5542,7 +5528,6 @@
+     g_ringMirror = false;   /* the mapping stays for the game's next recordings; UnmapPluginMemory removes it */
+     BigFreeAll();
+     g_appPid = g_appBase = 0;
+-    g_convHold = false;
+     g_shared.state = REC_STATE_IDLE;
+     if (R_FAILED(g_shared.lastError))
+         LED_SIGNAL(LED_ERROR);
+diff --git a/sysmod/source/capturegate.h b/sysmod/source/capturegate.h
+new file mode 100644
+--- /dev/null
++++ b/sysmod/source/capturegate.h
+@@ -0,0 +1,39 @@
++#ifndef REC_CAPTUREGATE_H
++#define REC_CAPTUREGATE_H
++
++#include <stdbool.h>
++#include <stdint.h>
++
++#define CAPTURE_GATE_CLOSED UINT32_C(0x80000000)
++
++static inline bool capture_gate_enter(uint32_t *gate)
++{
++    uint32_t value = __atomic_load_n(gate, __ATOMIC_RELAXED);
++    while (!(value & CAPTURE_GATE_CLOSED)) {
++        if (__atomic_compare_exchange_n(gate, &value, value + 1, true, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
++            return true;
++    }
++    return false;
++}
++
++static inline void capture_gate_leave(uint32_t *gate)
++{
++    __atomic_fetch_sub(gate, 1u, __ATOMIC_ACQ_REL);
++}
++
++static inline void capture_gate_close(uint32_t *gate)
++{
++    __atomic_fetch_or(gate, CAPTURE_GATE_CLOSED, __ATOMIC_ACQ_REL);
++}
++
++static inline bool capture_gate_busy(const uint32_t *gate)
++{
++    return __atomic_load_n(gate, __ATOMIC_ACQUIRE) != CAPTURE_GATE_CLOSED;
++}
++
++static inline void capture_gate_open(uint32_t *gate)
++{
++    __atomic_store_n(gate, 0u, __ATOMIC_RELEASE);
++}
++
++#endif

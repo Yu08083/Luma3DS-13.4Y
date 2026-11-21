@@ -157,7 +157,7 @@ int main(void)
   japanese=language;g_safeMode=safe;themeEnabled=theme;state.valid=false;
   menuIsRelease=false;menuVersionLoaded=true;batteryTemperature=255;batteryVoltage=5.25f;batteryPercentage=100;
   testNow+=1000;draw(&rosalinaMenu,&state,true);CHECK(has("255.255.255.254"));geometry();
-  CHECK(has("Luma3DS ver.y22-0000002a"));
+  CHECK(has("Luma3DS ver.y23-0000002a"));
   char name[64];snprintf(name,sizeof(name),"language%u-safe%u-theme%u",language,safe,theme);frame(name);
  }
  miniSocEnabled=false;captureRunning=false;state.valid=false;testNow+=1000;
