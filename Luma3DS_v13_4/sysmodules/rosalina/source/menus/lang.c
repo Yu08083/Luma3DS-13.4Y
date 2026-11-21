@@ -416,6 +416,7 @@ static const LangEntry g_labels[] =
     { "Reboot", "再起動" },
     { "Receiver: NTR mode", "受信アプリ: NTRモード" },
     { "Receiving file", "ファイルを受信中" },
+    { "Recorder is not responding.", "録画モジュールが応答しません。" },
     { "Recording", "録画中" },
     { "Region %lu / %lu", "領域 %lu / %lu" },
     { "Remaining:     direction unclear\n", "残り時間:     増減方向が不明\n" },

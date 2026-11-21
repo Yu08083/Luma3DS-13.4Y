@@ -79,7 +79,7 @@ def main():
         expect(lib.Update_TrustedUrl(url.encode()),False)
     url=c.create_string_buffer(2048)
     expect(lib.Update_AssetUrl(url,tag.encode(),b'boot.firm'));assert url.value==b'https://github.com/Yu08083/Luma3DS-13.4Y/releases/download/v13.6Y/boot.firm'
-    for version in ('v13.4Y','ver.y19','v13.6Y','ver.y21'):
+    for version in ('v13.4Y','ver.y19','v13.6Y','ver.y21','ver.y22'):
         ok,value=release(json.dumps({'tag_name':version,'draft':False,'prerelease':False}));expect(ok);assert value==version.encode()
         update=dict(base,version=version)
         raw=json.dumps(update).encode();parsed=Manifest()

@@ -7,25 +7,44 @@
 #include "menu.h"
 #include "menus/lang.h"
 #include "remote_play.h"
+#include "MyThread.h"
+
+#define REC_PORT_ABSENT ((Result)0xD88007FA)
+#define REC_TIMEOUT ((Result)-3)
+#define REC_OFFLINE ((Result)-5)
+#define REC_CHECKING ((Result)1)
+
+enum { REC_CHECK = 0, REC_LAUNCH = YU_REC_CMD_SAVE_CLIP + 1 };
+
+static MyThread recorderThread;
+static u32 recorderStack[0x800 / sizeof(u32)] __attribute__((aligned(8)));
+static u32 workAction, workStatus[12], workCancelled;
+static Result workResult;
+static u64 workStart;
+
+static bool recorderCancelled(void)
+{
+    return __atomic_load_n(&workCancelled, __ATOMIC_ACQUIRE) != 0;
+}
 
 static Result recorderRequest(u32 command, u32 action, u32 status[12])
 {
     Handle session;
     Result result = svcConnectToPort(&session, YU_REC_PORT);
-    if(R_FAILED(result))
-        return result;
+    if(result != 0)
+        return result == REC_PORT_ABSENT ? REC_OFFLINE : result;
     u32 *buffer = getThreadCommandBuffer();
     buffer[0] = command == 1 ? YU_REC_STATUS_REQUEST : YU_REC_COMMAND_REQUEST;
     buffer[1] = action;
-    result = svcSendSyncRequest(session);
-    if(R_SUCCEEDED(result))
+    result = recorderCancelled() ? REC_TIMEOUT : svcSendSyncRequest(session);
+    if(result == 0)
     {
         if(buffer[0] != (command == 1 ? YU_REC_STATUS_REPLY : YU_REC_COMMAND_REPLY))
             result = (Result)YU_REC_ERROR_INVALID;
         else
         {
             result = (Result)buffer[1];
-            if(R_SUCCEEDED(result) && command == 1)
+            if(result == 0 && command == 1)
             {
                 if(buffer[2] != YU_REC_MAGIC || buffer[3] != YU_REC_PROTOCOL_VERSION || buffer[4] > YU_REC_REPLAY)
                     result = (Result)YU_REC_ERROR_INVALID;
@@ -38,11 +57,23 @@ static Result recorderRequest(u32 command, u32 action, u32 status[12])
     return result;
 }
 
+static bool recorderFinished(void)
+{
+    if(svcWaitSynchronization(recorderThread.handle, 0) != 0)
+        return false;
+    svcCloseHandle(recorderThread.handle);
+    recorderThread.handle = 0;
+    return true;
+}
+
 bool Recorder_IsRunning(void)
 {
+    if(recorderThread.handle && !recorderFinished())
+        return true;
     Handle session;
-    if(R_FAILED(svcConnectToPort(&session, YU_REC_PORT)))
-        return false;
+    Result result = svcConnectToPort(&session, YU_REC_PORT);
+    if(result != 0)
+        return result != REC_PORT_ABSENT;
     svcCloseHandle(session);
     return true;
 }
@@ -55,14 +86,17 @@ static Result recorderLaunch(void)
         return result;
     if(!(options & 2))
         return -2;
+    if(recorderCancelled())
+        return REC_TIMEOUT;
     const FS_ProgramInfo program = {.programId = YU_REC_TITLE_ID, .mediaType = MEDIATYPE_NAND};
     result = PMAPP_LaunchTitle(&program, 0);
     if(R_FAILED(result))
         return result;
-    for(u32 attempt = 0; attempt < 60 && !menuShouldExit; ++attempt)
+    for(u32 attempt = 0; attempt < 60 && !recorderCancelled(); ++attempt)
     {
         u32 status[12];
-        if(R_SUCCEEDED(recorderRequest(1, 0, status)))
+        result = recorderRequest(1, 0, status);
+        if(result == 0)
         {
             if(status[3] == YU_REC_IDLE || status[3] == YU_REC_REPLAY)
                 return recorderRequest(2, YU_REC_CMD_START, NULL);
@@ -71,59 +105,145 @@ static Result recorderLaunch(void)
             if(status[3] == YU_REC_ERROR)
                 return R_FAILED((Result)status[10]) ? (Result)status[10] : (Result)YU_REC_ERROR_STATE;
         }
+        else if(result != REC_OFFLINE)
+            return result;
         svcSleepThread(50000000LL);
     }
-    return -3;
+    return REC_TIMEOUT;
+}
+
+static void recorderWork(void)
+{
+    if(recorderCancelled())
+        workResult = REC_TIMEOUT;
+    else if(workAction == REC_LAUNCH)
+        workResult = recorderLaunch();
+    else
+        workResult = recorderRequest(workAction == REC_CHECK ? 1 : 2, workAction, workStatus);
+}
+
+static Result startRecorderWork(u32 action, u64 now)
+{
+    workAction = action;
+    workStart = now;
+    __atomic_store_n(&workCancelled, 0, __ATOMIC_RELEASE);
+    Result result = MyThread_Create(&recorderThread, recorderWork, recorderStack, sizeof(recorderStack), 54, CORE_SYSTEM);
+    if(result != 0)
+        recorderThread.handle = 0;
+    return result;
+}
+
+static void drawRecorder(const u32 status[12], Result statusResult, Result result)
+{
+    static const char *const states[] = {"Starting...", "Ready", "Recording", "Saving...", "Error", "OFF", "Replay"};
+    bool ready = statusResult == 0;
+    u32 state = ready ? status[3] : YU_REC_EXITED;
+    const char *stateText = ready ? states[state] : statusResult == REC_CHECKING ? "Waiting for connection" :
+                            statusResult == REC_OFFLINE ? "OFF" : "Error";
+    Draw_Lock();
+    Draw_ClearFramebuffer();
+    Draw_DrawString(10, 10, g_accentColor, Lang_Translate("SD recording"));
+    Draw_DrawString(10, 38, g_textColor, Lang_Translate(stateText));
+    if(ready)
+        Draw_DrawFormattedString(10, 60, g_textColor, Lang_Translate("Time: %lu s  Files: %lu"),
+                                 (unsigned long)status[4], (unsigned long)status[9]);
+    Draw_DrawString(10, 92, g_textColor, "/3ds/recorder/recordings/");
+    Draw_DrawString(10, 114, g_textColor, Lang_Translate("MP4 / settings: Yu_ Recorder"));
+    Result error = statusResult != REC_OFFLINE && R_FAILED(statusResult) ? statusResult : result;
+    if(!error && ready)
+        error = (Result)status[10];
+    if(error == -2)
+        Draw_DrawString(10, 146, g_textColor, Lang_Translate("Enable external modules at boot."));
+    else if(error == -4)
+        Draw_DrawString(10, 146, g_textColor, Lang_Translate("Stop Yu_ Capture first."));
+    else if(error == REC_TIMEOUT)
+        Draw_DrawString(10, 146, g_textColor, Lang_Translate("Recorder is not responding."));
+    else if(R_FAILED(error))
+        Draw_DrawFormattedString(10, 146, g_textColor, Lang_Translate("Operation failed (0x%08lx)."), (unsigned long)(u32)error);
+    if(ready || statusResult == REC_OFFLINE)
+        Draw_DrawString(10, 188, g_cursorColor, Lang_Translate(state == YU_REC_RECORDING ? "A: stop" : "A: record"));
+    Draw_DrawString(10, 210, g_cursorColor, Lang_Translate(ready ? "Y: shut down  B: back" : "B: back"));
+    Draw_FlushFramebuffer();
+    Draw_Unlock();
 }
 
 void RosalinaMenu_Recorder(void)
 {
-    Result result = 0;
+    u32 status[12] = {0}, requested = 0;
+    Result statusResult = REC_CHECKING, result = 0;
+    u64 nextPoll = 0;
+    bool redraw = true;
     while(!menuShouldExit)
     {
-        u32 status[12] = {0};
-        Result statusResult = recorderRequest(1, 0, status);
-        bool ready = R_SUCCEEDED(statusResult);
-        u32 state = ready ? status[3] : YU_REC_EXITED;
-        const char *stateText = "OFF";
-        if(ready)
+        u64 now = svcGetSystemTick();
+        if(recorderThread.handle)
         {
-            static const char *const states[] = {"Starting...", "Ready", "Recording", "Saving...", "Error", "OFF", "Replay"};
-            stateText = state < 7 ? states[state] : "Error";
+            if(recorderFinished())
+            {
+                if(!recorderCancelled())
+                {
+                    if(workAction == REC_CHECK)
+                    {
+                        statusResult = workResult;
+                        if(workResult == 0)
+                            memcpy(status, workStatus, sizeof(status));
+                        nextPoll = now + SYSCLOCK_ARM11 / 2;
+                    }
+                    else
+                        result = workResult;
+                }
+                redraw = true;
+            }
+            else if(now - workStart >= 4ULL * SYSCLOCK_ARM11 && (!recorderCancelled() || statusResult != REC_TIMEOUT))
+            {
+                __atomic_store_n(&workCancelled, 1, __ATOMIC_RELEASE);
+                statusResult = REC_TIMEOUT;
+                result = 0;
+                requested = 0;
+                redraw = true;
+            }
         }
-        Draw_Lock();
-        Draw_ClearFramebuffer();
-        Draw_DrawString(10, 10, g_accentColor, Lang_Translate("SD recording"));
-        Draw_DrawString(10, 38, g_textColor, Lang_Translate(stateText));
-        if(ready)
-            Draw_DrawFormattedString(10, 60, g_textColor, Lang_Translate("Time: %lu s  Files: %lu"),
-                                     (unsigned long)status[4], (unsigned long)status[9]);
-        Draw_DrawString(10, 92, g_textColor, "/3ds/recorder/recordings/");
-        Draw_DrawString(10, 114, g_textColor, Lang_Translate("MP4 / settings: Yu_ Recorder"));
-        Result error = result ? result : (ready ? (Result)status[10] : 0);
-        if(error == -2)
-            Draw_DrawString(10, 146, g_textColor, Lang_Translate("Enable external modules at boot."));
-        else if(error == -4)
-            Draw_DrawString(10, 146, g_textColor, Lang_Translate("Stop Yu_ Capture first."));
-        else if(R_FAILED(error))
-            Draw_DrawFormattedString(10, 146, g_textColor, Lang_Translate("Operation failed (0x%08lx)."), (unsigned long)(u32)error);
-        Draw_DrawString(10, 188, g_cursorColor, Lang_Translate(state == YU_REC_RECORDING ? "A: stop" : "A: record"));
-        Draw_DrawString(10, 210, g_cursorColor, Lang_Translate("Y: shut down  B: back"));
-        Draw_FlushFramebuffer();
-        Draw_Unlock();
-        u32 keys = waitInputWithTimeout(500);
+        if(redraw)
+        {
+            drawRecorder(status, statusResult, result);
+            redraw = false;
+        }
+        if(!recorderThread.handle)
+        {
+            u32 action = REC_CHECK;
+            if(requested && (statusResult == 0 || statusResult == REC_OFFLINE))
+            {
+                if((requested & KEY_Y) && statusResult == 0)
+                    action = YU_REC_CMD_EXIT;
+                else if(requested == KEY_A)
+                    action = statusResult == REC_OFFLINE ? REC_LAUNCH :
+                             status[3] == YU_REC_RECORDING ? YU_REC_CMD_STOP : YU_REC_CMD_START;
+            }
+            requested = 0;
+            if((action == REC_LAUNCH || action == YU_REC_CMD_START) && RemotePlay_IsRunning())
+            {
+                result = -4;
+                redraw = true;
+            }
+            else if(action != REC_CHECK || now >= nextPoll)
+            {
+                Result started = startRecorderWork(action, now);
+                nextPoll = action == REC_CHECK ? now + SYSCLOCK_ARM11 / 2 : 0;
+                if(started != 0)
+                {
+                    statusResult = started;
+                    result = 0;
+                    nextPoll = now + SYSCLOCK_ARM11 / 2;
+                    redraw = true;
+                }
+            }
+        }
+        u32 keys = waitInputWithTimeout(100);
         if(keys & KEY_B)
             break;
-        if((keys & KEY_Y) && ready)
-            result = recorderRequest(2, YU_REC_CMD_EXIT, NULL);
-        else if(keys & KEY_A)
-        {
-            if(state != YU_REC_RECORDING && RemotePlay_IsRunning())
-                result = -4;
-            else if(!ready)
-                result = Recorder_IsRunning() ? statusResult : recorderLaunch();
-            else
-                result = recorderRequest(2, state == YU_REC_RECORDING ? YU_REC_CMD_STOP : YU_REC_CMD_START, NULL);
-        }
+        if(!recorderThread.handle || (workAction == REC_CHECK && !recorderCancelled()))
+            requested |= keys & (KEY_A | KEY_Y);
     }
+    if(recorderThread.handle)
+        __atomic_store_n(&workCancelled, 1, __ATOMIC_RELEASE);
 }

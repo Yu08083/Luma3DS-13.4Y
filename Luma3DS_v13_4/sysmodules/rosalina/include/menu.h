@@ -30,7 +30,7 @@
 #define FORK_OTHER_VERSION "9.1"
 #define FORK_DISPLAY_VERSION "v13.6Y"
 #define FORK_OTHER_DISPLAY_VERSION "v9.1"
-#define FORK_RELEASE_VERSION "ver.y21"
+#define FORK_RELEASE_VERSION "ver.y22"
 
 extern u32 g_accentColor;
 extern u32 g_textColor;
